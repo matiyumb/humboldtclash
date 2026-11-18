@@ -20,6 +20,8 @@ export interface Track {
   deezerId?: number;
   /** Portada del álbum (URL https). */
   cover?: string;
+  /** Popularidad (Deezer «rank»): define la dificultad. */
+  rank?: number;
 }
 
 const titleKey = (t: string) =>
@@ -149,7 +151,7 @@ export class Catalog {
   }
 
   list(): CatalogSummary[] {
-    return this.groups().map((g) => {
+    return this.groups().filter((g) => g.tracks.length > 0).map((g) => {
       const count = this.playableTracks(g.id)!.length;
       const artists = [...new Set(g.tracks.map((t) => t.artist))];
       const subtitle =

@@ -1,7 +1,7 @@
 // API propia de Humboldtclash sobre la API pública de Deezer (sin clave).
 // Busca artistas, trae sus canciones top / playlists / éxitos con vista previa de 30 s,
 // y guarda en caché las respuestas para no superar el límite de Deezer (≈50 peticiones / 5 s).
-import type { CatalogSummary } from '../../shared/types.js';
+import type { CatalogSummary, MixTrack } from '../../shared/types.js';
 import type { Track } from './catalog.js';
 
 export interface DeezerTrackRaw {
@@ -11,6 +11,7 @@ export interface DeezerTrackRaw {
   preview?: string;
   link?: string;
   readable?: boolean;
+  rank?: number;
   artist?: { id: number; name: string };
   album?: { title?: string; cover?: string; cover_medium?: string };
 }
@@ -33,9 +34,16 @@ export function deezerToTrack(d: DeezerTrackRaw, collection: string): Track | nu
     previewUrl: d.preview,
     storeUrl: d.link ?? `https://www.deezer.com/track/${d.id}`,
     cover: d.album?.cover_medium || d.album?.cover || undefined,
+    rank: typeof d.rank === "number" ? d.rank : 0,
     origin: ORIGIN,
     license: LICENSE,
   };
+}
+
+export function toMixTrack(d: DeezerTrackRaw): MixTrack | null {
+  const t = deezerToTrack(d, '');
+  if (!t) return null;
+  return { deezerId: d.id, title: t.title, artist: t.artist, cover: t.cover ?? null, rank: t.rank ?? 0, preview: t.previewUrl!, link: t.storeUrl! };
 }
 
 export class Deezer {
@@ -111,6 +119,20 @@ export class Deezer {
     const res = await this.get<{ data: DeezerTrackRaw[] }>(`/chart/0/tracks?limit=100`, 30 * 60_000);
     const name = 'Éxitos del momento';
     return { name, tracks: (res.data ?? []).map((d) => deezerToTrack(d, name)).filter((t): t is Track => !!t) };
+  }
+
+  /** Búsqueda de canciones (para armar playlists). */
+  async searchTracks(q: string, limit = 25): Promise<MixTrack[]> {
+    const query = q.trim().slice(0, 80);
+    if (query.length < 2) return [];
+    const res = await this.get<{ data: DeezerTrackRaw[] }>(`/search?q=${encodeURIComponent(query)}&limit=${limit}`, 10 * 60_000);
+    return (res.data ?? []).map(toMixTrack).filter((t): t is MixTrack => !!t);
+  }
+
+  /** Canciones top de un artista en formato de playlist (para la mezcla aleatoria). */
+  async artistMixTracks(id: number): Promise<MixTrack[]> {
+    const top = await this.get<{ data: DeezerTrackRaw[] }>(`/artist/${id}/top?limit=100`, 30 * 60_000);
+    return (top.data ?? []).map(toMixTrack).filter((t): t is MixTrack => !!t);
   }
 
   /** Las URL de vista previa de Deezer caducan: pide una nueva para una pista. */

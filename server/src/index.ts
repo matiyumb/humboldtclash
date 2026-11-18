@@ -1,45 +1,62 @@
 import express from 'express';
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Server } from 'socket.io';
-import { Catalog } from './catalog.js';
+import { rankFor, sanitizeSettings, type Identity, type MixTrack } from '../../shared/types.js';
+import { Catalog, remoteAllowed } from './catalog.js';
 import { AudioProxy } from './audioProxy.js';
 import { Deezer, DeezerError } from './deezer.js';
 import { Library } from './library.js';
-import { GameManager } from './game.js';
+import { GameManager, cleanNickname } from './game.js';
+import { createStore } from './store.js';
 
 const ROOT = resolve(process.env.HUMBOLDTCLASH_ROOT ?? process.cwd());
+const CATALOG_DIR = resolve(process.env.CATALOG_DIR ?? ROOT);
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const DEEZER_ON = process.env.DEEZER !== 'off';
 
-const library = new Library(new Catalog(ROOT), DEEZER_ON ? new Deezer() : null);
+const store = await createStore(ROOT);
+const library = new Library(new Catalog(CATALOG_DIR), DEEZER_ON ? new Deezer() : null, store);
 const app = express();
 app.disable('x-powered-by');
+app.use(express.json({ limit: '300kb' }));
 const server = createServer(app);
 const io = new Server(server, { serveClient: false, pingInterval: 10_000, pingTimeout: 8_000 });
 const games = new GameManager(library, (socketId, event, payload) => io.to(socketId).emit(event, payload));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, rooms: games.roomCount(), deezer: DEEZER_ON }));
+const deezerError = (res: express.Response, e: unknown) =>
+  res.status(502).json({ error: e instanceof DeezerError ? e.message : 'Error consultando Deezer.' });
 
-// Catálogos: destacados de Deezer + catálogo local.
+app.get('/api/health', (_req, res) => res.json({ ok: true, rooms: games.roomCount(), deezer: DEEZER_ON, store: store.kind }));
+
+// ---------- Catálogos ----------
 app.get('/api/catalogs', async (_req, res) => {
   res.json(await library.list());
 });
 
-// Búsqueda de artistas en Deezer (nuestra API sobre la de Deezer).
 app.get('/api/deezer/artistas', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q : '';
-  try {
-    res.json(await library.search(q));
-  } catch (e) {
-    res.status(502).json({ error: e instanceof DeezerError ? e.message : 'Error buscando en Deezer.' });
-  }
+  try { res.json(await library.search(q)); } catch (e) { deezerError(res, e); }
+});
+
+app.get('/api/deezer/canciones', async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  if (!library.deezer) return res.json([]);
+  try { res.json(await library.deezer.searchTracks(q)); } catch (e) { deezerError(res, e); }
+});
+
+app.get('/api/deezer/artista/:id/canciones', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!library.deezer || !Number.isInteger(id) || id <= 0) return res.json([]);
+  try { res.json(await library.deezer.artistMixTracks(id)); } catch (e) { deezerError(res, e); }
 });
 
 app.get('/api/catalogs/:id/check', async (req, res) => {
-  const { resolved: _omit, ...check } = await library.check(req.params.id);
+  const settings = sanitizeSettings({ rounds: req.query.rondas, difficulty: req.query.dificultad, shuffle: true });
+  const { resolved: _omit, ...check } = await library.check(req.params.id, settings);
   res.json(check);
 });
 
@@ -48,9 +65,89 @@ app.get('/api/salas-publicas', (_req, res) => {
   res.json(games.publicRooms());
 });
 
+// ---------- Perfiles y ranking ----------
+const validId = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(s);
+
+app.get('/api/perfil/:playerId', async (req, res) => {
+  if (!validId(req.params.playerId)) return res.status(400).json({ error: 'Id no válido' });
+  res.setHeader('Cache-Control', 'no-store');
+  const p = (await store.profile(req.params.playerId)) ?? { playerId: req.params.playerId, nickname: '', points: 0, games: 0, wins: 0, correct: 0, best: 0 };
+  const { current, next } = rankFor(p.wins);
+  res.json({ ...p, rank: current, nextRank: next, persistent: store.kind === 'postgres' });
+});
+
+app.get('/api/ranking', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const rows = await store.leaderboard(20);
+  res.json(rows.map((r) => ({ ...r, rank: rankFor(r.wins).current.id })));
+});
+
+// ---------- Playlists de usuarios ----------
+/** Clave de dueño: solo quien tiene el secreto del navegador puede editar sus playlists. */
+function ownerKey(identity: unknown): string | null {
+  const id = identity as Identity | undefined;
+  if (!id || !validId(id.playerId) || !validId(id.secret)) return null;
+  return createHash('sha256').update(`${id.playerId}:${id.secret}`).digest('base64url').slice(0, 32);
+}
+
+const isHttps = (u: unknown) => typeof u === 'string' && u.length < 600 && remoteAllowed(u);
+function cleanTrack(t: unknown): MixTrack | null {
+  const x = t as Partial<MixTrack>;
+  if (!x || typeof x !== 'object') return null;
+  const id = Number(x.deezerId);
+  const title = typeof x.title === 'string' ? x.title.trim().slice(0, 120) : '';
+  const artist = typeof x.artist === 'string' ? x.artist.trim().slice(0, 120) : '';
+  if (!Number.isInteger(id) || id <= 0 || !title || !artist || !isHttps(x.preview)) return null;
+  return {
+    deezerId: id, title, artist,
+    cover: isHttps(x.cover) ? (x.cover as string) : null,
+    rank: Number.isFinite(Number(x.rank)) ? Math.max(0, Math.round(Number(x.rank))) : 0,
+    preview: x.preview as string,
+    link: typeof x.link === 'string' && /^https:\/\/(www\.)?deezer\.com\//.test(x.link) ? x.link : `https://www.deezer.com/track/${id}`,
+  };
+}
+
+app.post('/api/mixes/mias', async (req, res) => {
+  const owner = ownerKey(req.body?.identity);
+  if (!owner) return res.status(400).json({ error: 'Identidad no válida' });
+  res.json(await store.mixesOf(owner));
+});
+
+app.get('/api/mixes/:id', async (req, res) => {
+  const mix = await store.mix(String(req.params.id).slice(0, 24));
+  if (!mix) return res.status(404).json({ error: 'Esa playlist no existe.' });
+  const { owner: _o, ...pub } = mix;
+  res.json(pub);
+});
+
+app.post('/api/mixes', async (req, res) => {
+  const owner = ownerKey(req.body?.identity);
+  if (!owner) return res.status(400).json({ error: 'Identidad no válida' });
+  const name = typeof req.body?.name === 'string' ? req.body.name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40) : '';
+  if (!name) return res.status(400).json({ error: 'Ponle un nombre a la playlist.' });
+  const raw = Array.isArray(req.body?.tracks) ? req.body.tracks.slice(0, 200) : [];
+  const seen = new Set<number>();
+  const tracks = raw.map(cleanTrack).filter((t: MixTrack | null): t is MixTrack => !!t && !seen.has(t.deezerId) && !!seen.add(t.deezerId));
+  if (tracks.length < 5) return res.status(400).json({ error: 'Una playlist necesita al menos 5 canciones.' });
+  const ownerName = cleanNickname(req.body?.nickname) ?? 'Anónimo';
+  try {
+    const mix = await store.saveMix(owner, ownerName, { name, tracks }, typeof req.body?.id === 'string' ? req.body.id : undefined);
+    const { owner: _o, ...pub } = mix;
+    res.json(pub);
+  } catch (e) {
+    res.status(403).json({ error: (e as Error).message });
+  }
+});
+
+app.post('/api/mixes/:id/borrar', async (req, res) => {
+  const owner = ownerKey(req.body?.identity);
+  if (!owner) return res.status(400).json({ error: 'Identidad no válida' });
+  res.json({ ok: await store.deleteMix(owner, String(req.params.id)) });
+});
+
 // ---------- Audio ----------
-// El navegador solo ve /api/audio/<token aleatorio>. Las vistas previas remotas (Deezer)
-// pasan por aquí: así no se revela la canción y todos los jugadores de la sala comparten caché.
+// El navegador solo ve /api/audio/<token aleatorio>. Las vistas previas de Deezer pasan por aquí:
+// así no se revela la canción y todos los jugadores de la sala comparten la descarga.
 const proxy = new AudioProxy(async (id) => (library.deezer ? library.deezer.freshPreview(id) : null));
 
 app.get('/api/audio/:token', async (req, res) => {
@@ -94,11 +191,12 @@ io.on('connection', (socket) => {
       }
     });
   };
-  on('solo:start', (d) => games.createRoom(socket.id, d.identity, d.nickname, 'solo', d.catalogId));
-  on('room:create', (d) => games.createRoom(socket.id, d.identity, d.nickname, 'multi', d.catalogId, d.isPublic));
+  on('solo:start', (d) => games.createRoom(socket.id, d.identity, d.nickname, 'solo', d.catalogId, false, d.settings));
+  on('room:create', (d) => games.createRoom(socket.id, d.identity, d.nickname, 'multi', d.catalogId, d.isPublic, d.settings));
   on('room:join', (d) => games.joinRoom(socket.id, d.code, d.identity, d.nickname));
   on('room:leave', () => games.leave(socket.id));
   on('room:setCatalog', (d) => games.setCatalog(socket.id, d.catalogId));
+  on('room:setSettings', (d) => games.setSettings(socket.id, d.settings));
   on('room:setPublic', (d) => games.setPublic(socket.id, d.isPublic));
   on('room:start', () => games.start(socket.id));
   on('room:playAgain', () => games.playAgain(socket.id));
@@ -109,7 +207,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => games.disconnect(socket.id));
 });
 
+const shutdown = async () => { await store.close().catch(() => {}); process.exit(0); };
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 server.listen(PORT, HOST, () => {
-  const n = library.local.list().find((c) => c.id === 'todo')?.trackCount ?? 0;
-  console.log(`Humboldtclash escuchando en http://localhost:${PORT} (${n} canciones locales · Deezer ${DEEZER_ON ? 'activado' : 'desactivado'})`);
+  console.log(`Humboldtclash escuchando en http://localhost:${PORT} · Deezer ${DEEZER_ON ? 'activado' : 'desactivado'} · datos: ${store.kind}`);
 });

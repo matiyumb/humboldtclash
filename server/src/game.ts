@@ -1,8 +1,8 @@
 import { randomBytes, createHash, timingSafeEqual, randomInt } from 'node:crypto';
 import { extname } from 'node:path';
 import {
-  MAX_PLAYERS, MIN_PLAYERS_MULTI, MIN_TRACKS, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUNDS_PER_GAME, ROUND_MS,
-  scoreFor,
+  MAX_PLAYERS, MIN_PLAYERS_MULTI, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUND_MS, LIGHTNING_MS,
+  scoreFor, sanitizeSettings, soloWinThreshold, rankFor, DEFAULT_SETTINGS, type GameSettings,
   type Ack, type Identity, type MissedSong, type PlayerView, type RevealView, type RoomState, type RoundResult, type StandingRow,
 } from '../../shared/types.js';
 import { AUDIO_TYPES, type Track } from './catalog.js';
@@ -30,7 +30,7 @@ interface Player {
   lobbyTimer?: NodeJS.Timeout;
 }
 
-interface Answer { optionId: string; correct: boolean; points: number }
+interface Answer { optionId: string; correct: boolean; points: number; lightning: boolean; ms: number }
 
 interface Round {
   index: number;
@@ -42,6 +42,7 @@ interface Round {
   phase: 'loading' | 'answering' | 'reveal';
   ready: Set<string>;
   replacements: number;
+  clipStart: number; // 0..1, igual para todos
   deadline: number | null;
   answers: Map<string, Answer>;
   reveal: RevealView | null;
@@ -67,6 +68,8 @@ interface Room {
   catalogName: string | null;
   starting: boolean; // evita doble inicio mientras se cargan canciones de Deezer
   introUntil: number | null;
+  settings: GameSettings;
+  recorded: boolean; // resultados ya guardados en el perfil
 }
 
 export type AudioTicket = { code: string; type: string } & (
@@ -115,7 +118,32 @@ export class GameManager {
   private sockets = new Map<string, { code: string; playerId: string }>();
   private tickets = new Map<string, AudioTicket>();
 
+  /** Rango (por victorias guardadas) de cada jugador, para mostrarlo en salas. */
+  private ranks = new Map<string, string>();
+
   constructor(private library: Library, private send: Send) {}
+
+  private loadRanks(room: Room) {
+    const store = this.library.store;
+    if (!store) return;
+    const ids = room.players.map((p) => p.id).filter((id) => !this.ranks.has(id));
+    if (!ids.length) return;
+    store.profiles(ids).then((m) => {
+      let changed = false;
+      for (const id of ids) { const r = rankFor(m.get(id)?.wins ?? 0).current.id; if (this.ranks.get(id) !== r) { this.ranks.set(id, r); changed = true; } }
+      if (changed && this.rooms.has(room.code)) this.broadcast(room);
+    }).catch(() => {});
+  }
+
+  setSettings(socketId: string, raw: unknown): Ack {
+    const ctx = this.ctx(socketId);
+    if (!ctx) return { ok: false, error: 'No estás en una sala.' };
+    if (ctx.room.hostId !== ctx.player.id) return { ok: false, error: 'Solo el anfitrión puede cambiar los ajustes.' };
+    if (ctx.room.phase !== 'lobby') return { ok: false, error: 'La partida ya empezó.' };
+    ctx.room.settings = sanitizeSettings(raw);
+    this.broadcast(ctx.room);
+    return { ok: true };
+  }
 
   /** Salas públicas en espera, con hueco y con alguien conectado. */
   publicRooms(): PublicRoom[] {
@@ -158,7 +186,8 @@ export class GameManager {
   }
 
   // ---------- ciclo de vida de salas ----------
-  async createRoom(socketId: string, identity: unknown, nickname: unknown, mode: 'solo' | 'multi', catalogId?: unknown, isPublic?: unknown): Promise<Ack<{ code: string }>> {
+  async createRoom(socketId: string, identity: unknown, nickname: unknown, mode: 'solo' | 'multi', catalogId?: unknown, isPublic?: unknown, rawSettings?: unknown): Promise<Ack<{ code: string }>> {
+    const settings = rawSettings === undefined ? { ...DEFAULT_SETTINGS } : sanitizeSettings(rawSettings);
     if (!validIdentity(identity)) return { ok: false, error: 'Identidad no válida. Recarga la página.' };
     const nick = cleanNickname(nickname);
     if (!nick) return { ok: false, error: 'Escribe un apodo (1 a 16 caracteres).' };
@@ -166,7 +195,7 @@ export class GameManager {
     let catalogName: string | null = null;
     if (mode === 'solo' || (catalogId !== undefined && catalogId !== null)) {
       if (typeof catalogId !== 'string') return { ok: false, error: 'Elige un catálogo.' };
-      const check = await this.library.check(catalogId);
+      const check = await this.library.check(catalogId, settings);
       if (mode === 'solo' && !check.ok) return { ok: false, error: check.message };
       if (!check.resolved) return { ok: false, error: check.message };
       resolved = check.resolved;
@@ -182,10 +211,11 @@ export class GameManager {
       code, mode, phase: 'lobby', hostId: player.id, players: [player],
       catalogId: typeof catalogId === 'string' ? catalogId : null,
       deck: [], pool: [], used: new Set(), round: null, history: [],
-      isPublic: mode === "multi" && isPublic === true, catalogName, starting: false, introUntil: null,
+      isPublic: mode === "multi" && isPublic === true, catalogName, starting: false, introUntil: null, settings, recorded: false,
     };
     this.rooms.set(code, room);
     this.sockets.set(socketId, { code, playerId: player.id });
+    this.loadRanks(room);
     if (mode === 'solo') {
       const r = await this.startGame(room, resolved);
       if (!r.ok) { this.deleteRoom(room); return r; }
@@ -232,6 +262,7 @@ export class GameManager {
     this.detachSocket(socketId);
     const player = this.newPlayer(identity, this.uniqueNick(room, nick), socketId);
     room.players.push(player);
+    this.loadRanks(room);
     if (room.emptyTimer) { clearTimeout(room.emptyTimer); room.emptyTimer = undefined; }
     this.sockets.set(socketId, { code, playerId: player.id });
     if (!this.isActive(room, room.hostId)) room.hostId = player.id;
@@ -255,8 +286,8 @@ export class GameManager {
     if (room.hostId !== player.id) return { ok: false, error: 'Solo el anfitrión puede elegir el catálogo.' };
     if (room.phase !== 'lobby') return { ok: false, error: 'La partida ya empezó.' };
     if (typeof catalogId !== 'string') return { ok: false, error: 'Ese catálogo no existe.' };
-    const check = await this.library.check(catalogId);
-    if (!check.ok || !check.resolved) return { ok: false, error: check.message };
+    const check = await this.library.check(catalogId, room.settings);
+    if (!check.resolved) return { ok: false, error: check.message };
     if (room.phase !== 'lobby' || !this.rooms.has(room.code)) return { ok: false, error: 'La partida ya empezó.' };
     room.catalogId = catalogId;
     room.catalogName = check.resolved.name;
@@ -321,7 +352,8 @@ export class GameManager {
     const option = round.options.find((o) => o.id === optionId);
     if (!option) return { ok: false, error: 'Opción no válida.' };
     const correct = option.id === round.correctOptionId;
-    round.answers.set(player.id, { optionId: option.id, correct, points: scoreFor(correct, round.deadline - now) });
+    const elapsed = now - (round.deadline - ROUND_MS);
+    round.answers.set(player.id, { optionId: option.id, correct, points: scoreFor(correct, round.deadline - now, elapsed), lightning: correct && elapsed <= LIGHTNING_MS, ms: Math.max(0, elapsed) });
     if (this.activePlayers(room).every((p) => round.answers.has(p.id))) this.reveal(room);
     else this.broadcast(room);
     return { ok: true, accepted: true };
@@ -424,7 +456,7 @@ export class GameManager {
     if (!resolved) {
       room.starting = true;
       try {
-        const check = await this.library.check(room.catalogId);
+        const check = await this.library.check(room.catalogId, room.settings);
         if (!check.ok || !check.resolved) return { ok: false, error: check.message };
         resolved = check.resolved;
       } finally {
@@ -432,10 +464,12 @@ export class GameManager {
       }
       if (!this.rooms.has(room.code) || room.phase === 'playing') return { ok: false, error: 'La sala ya no está disponible.' };
     }
-    if (resolved.tracks.length < MIN_TRACKS) return { ok: false, error: 'Faltan canciones en ese catálogo.' };
+    if (resolved.deck.length < room.settings.rounds) return { ok: false, error: 'Faltan canciones para ese número de rondas.' };
     room.catalogName = resolved.name;
     room.pool = resolved.tracks;
-    room.deck = shuffle(room.pool);
+    // Orden aleatorio salvo que sea una playlist y se pida respetar su orden.
+    room.deck = resolved.ordered && !room.settings.shuffle ? [...resolved.deck] : shuffle(resolved.deck);
+    room.recorded = false;
     room.used = new Set();
     room.history = [];
     room.phase = 'playing';
@@ -462,7 +496,7 @@ export class GameManager {
 
   private nextRound(room: Room) {
     const index = (room.round?.index ?? 0) + 1;
-    if (index > ROUNDS_PER_GAME) return this.finish(room);
+    if (index > room.settings.rounds) return this.finish(room);
     const track = this.nextTrack(room);
     if (!track) return this.finish(room);
     this.setQuestion(room, index, track, 0);
@@ -481,7 +515,7 @@ export class GameManager {
       this.tickets.set(token, { url: track.previewUrl!, type: 'audio/mpeg', code: room.code, deezerId: track.deezerId });
     }
     room.round = {
-      index, track, token, replacements,
+      index, track, token, replacements, clipStart: Math.random(),
       questionId: opaque(),
       options: options.map(({ id, title, cover }) => ({ id, title, cover })),
       correctOptionId: options.find((o) => o.isCorrect)!.id,
@@ -537,7 +571,7 @@ export class GameManager {
     const results = new Map<string, RoundResult>();
     for (const p of room.players) {
       const a = voided ? undefined : round.answers.get(p.id);
-      const r: RoundResult = { playerId: p.id, optionId: a?.optionId ?? null, correct: !!a?.correct, points: a?.points ?? 0, timedOut: !a };
+      const r: RoundResult = { playerId: p.id, optionId: a?.optionId ?? null, correct: !!a?.correct, points: a?.points ?? 0, timedOut: !a, lightning: !!a?.lightning, ms: a?.ms ?? null };
       p.score += r.points;
       if (r.correct) p.correct++;
       results.set(p.id, r);
@@ -557,10 +591,25 @@ export class GameManager {
     this.broadcast(room);
   }
 
+  /** Victoria: 1.º puesto en multijugador (empates incluidos) o ≥70 % de aciertos en solitario. */
+  private winners(room: Room): Set<string> {
+    const active = room.players.filter((p) => !p.left);
+    if (room.mode === 'solo') return new Set(active.filter((p) => p.correct >= soloWinThreshold(room.settings.rounds)).map((p) => p.id));
+    if (active.length < MIN_PLAYERS_MULTI) return new Set();
+    const top = Math.max(...active.map((p) => p.score));
+    return new Set(active.filter((p) => p.score === top && top > 0).map((p) => p.id));
+  }
+
   private finish(room: Room) {
     room.phase = 'results';
     if (room.timer) clearTimeout(room.timer);
     if (room.round) this.tickets.delete(room.round.token);
+    if (!room.recorded && this.library.store) {
+      room.recorded = true;
+      const won = this.winners(room);
+      const outcomes = room.players.filter((p) => !p.left).map((p) => ({ playerId: p.id, nickname: p.nickname, score: p.score, correct: p.correct, won: won.has(p.id) }));
+      this.library.store.recordGame(outcomes).then(() => { for (const o of outcomes) this.ranks.delete(o.playerId); this.loadRanks(room); }).catch((e) => console.error('No se pudo guardar la partida', e));
+    }
     this.afterPresenceChange(room);
   }
 
@@ -573,17 +622,18 @@ export class GameManager {
     const round = room.round;
     const players: PlayerView[] = room.players.map((p) => ({
       id: p.id, nickname: p.nickname, connected: p.connected, left: p.left, isHost: p.id === room.hostId,
-      score: p.score, correct: p.correct,
+      score: p.score, correct: p.correct, rank: this.ranks.get(p.id) ?? 'aprendiz',
       answered: !!round && round.phase !== 'loading' && round.answers.has(p.id),
     }));
     let roundView: RoomState['round'] = null;
     if (round && room.phase === 'playing') {
       const mine = round.answers.get(me.id);
       roundView = {
-        index: round.index, total: ROUNDS_PER_GAME, questionId: round.questionId, phase: round.phase,
+        index: round.index, total: room.settings.rounds, questionId: round.questionId, phase: round.phase,
         // Las opciones solo se muestran cuando arranca el temporizador.
         options: round.phase === 'loading' ? [] : round.options,
         audioUrl: `/api/audio/${round.token}`,
+        clip: { start: round.clipStart, seconds: room.settings.clip === 'one' ? 1 : ROUND_MS / 1000 },
         deadline: round.deadline, serverNow: Date.now(),
         yourAnswer: mine ? (round.phase === 'reveal' ? { ...mine } : { optionId: mine.optionId }) : null,
         reveal: round.reveal,
@@ -597,12 +647,13 @@ export class GameManager {
         const r = h.results.get(me.id);
         if (r && !r.correct) missed.push({ round: h.index, title: h.track.title, artist: h.track.artist, reason: h.voided ? 'voided' : r.timedOut ? 'timeout' : 'wrong' });
       }
-      results = { standings, missed, totalRounds: ROUNDS_PER_GAME };
+      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id) };
     }
     return {
       code: room.code, mode: room.mode, phase: room.phase, you: me.id, hostId: room.hostId, players,
       catalog: room.catalogId ? { id: room.catalogId, name: room.catalogName ?? room.catalogId } : null,
       isPublic: room.isPublic,
+      settings: room.settings,
       intro: room.phase === "playing" && !room.round && room.introUntil ? { startsAt: room.introUntil, serverNow: Date.now() } : null,
       round: roundView, results, maxPlayers: MAX_PLAYERS, minPlayers: MIN_PLAYERS_MULTI,
     };
