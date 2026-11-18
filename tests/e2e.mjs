@@ -351,6 +351,8 @@ log('\n▶ Partida multijugador (escritorio + móvil)');
   const tB = await guest.evaluate(() => document.querySelector('.timer__num').textContent);
   check(Math.abs(Number(tA) - Number(tB)) <= 1, `misma hora límite (${tA} s / ${tB} s)`);
   // Disposición: 2×2 en escritorio, una columna en móvil.
+  const settled = (pg) => pg.waitForFunction(() => document.getAnimations().filter((a) => a.playState === 'running' && a.effect?.target?.classList?.contains('answer')).length === 0, null, { timeout: 3000 }).catch(() => {});
+  await Promise.all([settled(host), settled(guest)]);
   const hb = await host.$$eval('.answer', (els) => els.map((e) => e.getBoundingClientRect()).map((r) => [Math.round(r.x), Math.round(r.y)]));
   const gb = await guest.$$eval('.answer', (els) => els.map((e) => e.getBoundingClientRect()).map((r) => [Math.round(r.x), Math.round(r.y), Math.round(r.height)]));
   check(hb[0][1] === hb[1][1] && hb[0][0] === hb[2][0], 'escritorio: respuestas en cuadrícula 2×2');
