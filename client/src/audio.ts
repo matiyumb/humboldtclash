@@ -19,6 +19,7 @@ export const onAudioStatus = (fn: (s: AudioStatus) => void) => { listeners.add(f
 /** Llamar dentro de un clic del usuario. */
 export function unlockAudio() {
   unlockSfx();
+  if (typeof resumeAudioGraph === 'function') resumeAudioGraph();
   if (!el || unlocked) return;
   try {
     el.src = SILENCE;
@@ -115,3 +116,58 @@ export function forgetClip() {
   stopClip();
   loadedFor = null;
 }
+
+// ---------- Modo instrumental (efecto karaoke) ----------
+// La voz suele grabarse en el centro de la mezcla estéreo: restando el canal derecho al izquierdo
+// se cancela casi toda la voz. Los graves (también centrados) se recuperan con un filtro de paso bajo.
+// Es una aproximación: en canciones con voz muy abierta o en mono no hace milagros.
+let graph: { ctx: AudioContext; dry: GainNode; wet: GainNode } | null = null;
+let instrumental = false;
+
+function buildGraph() {
+  if (graph || !el) return graph;
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return null;
+  try {
+    const ctx = new AC();
+    const src = ctx.createMediaElementSource(el);
+    const dry = ctx.createGain();
+    const wet = ctx.createGain();
+    // Rama normal
+    src.connect(dry).connect(ctx.destination);
+    // Rama sin voz: (L − R) + graves de (L + R)
+    const split = ctx.createChannelSplitter(2);
+    const invR = ctx.createGain(); invR.gain.value = -1;
+    const side = ctx.createGain();
+    src.connect(split);
+    split.connect(side, 0);
+    split.connect(invR, 1).connect(side);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 120;
+    const mid = ctx.createGain(); mid.gain.value = 0.5;
+    split.connect(mid, 0); split.connect(mid, 1);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 160;
+    const boost = ctx.createGain(); boost.gain.value = 1.4;
+    side.connect(hp).connect(boost).connect(wet);
+    mid.connect(lp).connect(wet);
+    wet.connect(ctx.destination);
+    dry.gain.value = 1; wet.gain.value = 0;
+    graph = { ctx, dry, wet };
+  } catch {
+    graph = null;
+  }
+  return graph;
+}
+
+/** Activa/desactiva el modo instrumental. Llamar tras un gesto del usuario la primera vez. */
+export function setInstrumental(on: boolean) {
+  instrumental = on;
+  if (!on && !graph) return; // sin cambios: el audio sigue su camino normal
+  const g = buildGraph();
+  if (!g) return;
+  if (g.ctx.state === 'suspended') void g.ctx.resume();
+  const t = g.ctx.currentTime;
+  g.dry.gain.setTargetAtTime(on ? 0 : 1, t, 0.03);
+  g.wet.gain.setTargetAtTime(on ? 1 : 0, t, 0.03);
+}
+export const isInstrumental = () => instrumental;
+export function resumeAudioGraph() { if (graph && graph.ctx.state === 'suspended') void graph.ctx.resume(); }

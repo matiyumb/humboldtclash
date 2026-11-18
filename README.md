@@ -74,16 +74,46 @@ Para que duren para siempre, conecta un Postgres gratis de **Neon**:
 
 Las tablas se crean solas al arrancar. En `/api/health`, el campo `store` dice `postgres` cuando todo está bien.
 
+## Competitivo 1v1 y cuentas
+
+- **Cuenta:** usuario y contraseña (guardada con scrypt). Al crearla, el progreso del navegador pasa a la cuenta y puedes entrar desde cualquier dispositivo.
+- **Competitivo:** solo para cuentas registradas. Son duelos 1v1 de 10 canciones de «Éxitos del momento».
+  - El emparejamiento busca tu **mismo rango** y un **MMR parecido** (±100).
+  - El margen crece con la espera (+15 por segundo). A los 20 s acepta rangos vecinos y a los 45 s cualquiera.
+- **MMR:** usa **Glicko-2**. Ganar a alguien mejor da más MMR, y los jugadores nuevos se mueven más rápido hasta «calibrarse». Abandonar cuenta como derrota.
+- **Rangos:** Rookie, Conocedor, Fan y Melófano. **Solo cuentan las victorias multijugador** (salas y competitivo); el modo solo es práctica.
+
+## Publicidad (para el futuro)
+
+La página ya reserva huecos para anuncios en la barra lateral y entre secciones, pero están **apagados** y no ocupan espacio.
+Para activarlos, arranca con `ADS=1` (y opcionalmente `ADS_CLIENT=<id del proveedor>`), y pega el código del proveedor en `client/src/screens/AdSlot.tsx`.
+
+## Variables de entorno
+
+| Variable | Para qué |
+| --- | --- |
+| `PORT` | Puerto (Render lo pone solo) |
+| `DATABASE_URL` | Postgres para guardar puntos, rangos, MMR, cuentas y playlists |
+| `DEEZER=off` | Desactiva Deezer |
+| `ADS=1`, `ADS_CLIENT` | Activa los huecos de publicidad |
+| `CATALOG_DIR` | Carpeta con `catalog/` y `audio/` para canciones propias |
+
+## ¿Por qué Deezer y no Spotify?
+
+La política para desarrolladores de Spotify **prohíbe crear juegos y trivia** con su contenido.
+Además, desde noviembre de 2024 ya no da los fragmentos de 30 s ni las playlists oficiales a las apps nuevas.
+Por eso las playlists de Spotify se traen **importando la lista**: se exporta con Exportify o TuneMyMusic y se pega en «Mis playlists».
+
 ## Cómo se juega
 
 1. Escribe tu apodo (juegas como invitado, sin cuenta).
 2. **Jugar solo:** elige un artista o una colección. Se comprueba que tenga al menos 10 canciones distintas con audio, y luego pulsas «Empezar partida».
 3. **Crear sala:** compartes el código de 6 caracteres o el enlace. El anfitrión elige el catálogo y empieza la partida.
-4. Eliges de **5 a 20 canciones** por partida, la **dificultad** (General, Mainstream, Fan o Nicho, según la popularidad en Deezer) y si quieres el **modo 1 segundo**.
+4. Eliges de **5 a 20 canciones** por partida, la **duración del fragmento** (1 a 5 s, o completo), el modo **solo instrumental** (quita la voz), el **tamaño de la sala** (2 a 10), la **dificultad** (General, Mainstream, Fan o Nicho, según la popularidad en Deezer) y si quieres el **modo 1 segundo**.
    Cada fragmento empieza en un punto al azar de la canción (el mismo para toda la sala).
 5. Cada canción vale de **0 a 10 puntos**: un fallo o el tiempo agotado valen 0. Un acierto vale `5 + 1 punto por cada 2 segundos que queden`, con un máximo de 10. ⚡ Si aciertas en menos de 0,4 s, ganas la insignia «Oído biónico».
-6. **Rangos por victorias:** Rookie (50, bronce), Conocedor (100, plata), Fan (500, oro) y Melófano (5000, realeza).
-   Una victoria es quedar 1.º en multijugador, o acertar al menos el 70 % en solitario.
+6. **Rangos por victorias multijugador:** Rookie (50, bronce), Conocedor (100, plata), Fan (500, oro) y Melófano (5000, realeza).
+   El modo solo es práctica y no suma.
 7. **Mis playlists:** mezcla canciones de varios artistas, rellénalas al azar («🎲 5 al azar») y bárajalas.
 8. En el ordenador, las teclas **1–4** eligen la respuesta.
 

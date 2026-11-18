@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ROUND_MS, type RoomState } from '../../../shared/types';
 import { call, serverNow, socket } from '../net';
-import { fragmentStart, loadClip, onAudioStatus, playClip, stopClip, unlockAudio, type AudioStatus } from '../audio';
+import { fragmentStart, loadClip, onAudioStatus, playClip, setInstrumental, stopClip, unlockAudio, type AudioStatus } from '../audio';
 import { sfx } from '../sfx';
 import { Banner, CountUp, Cover, Icon, RankBadge, Waveform } from '../ui';
 
@@ -14,7 +14,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
   const round = room.round!;
   const q = round.questionId;
   const me = room.players.find((p) => p.id === room.you)!;
-  const multi = room.mode === 'multi';
+  const multi = room.mode !== 'solo';
 
   const [load, setLoad] = useState<LoadState>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -66,7 +66,9 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
     if (round.phase === 'reveal') stopClip();
   }, [round.phase, load, q, round.deadline, startPlayback]);
 
-  useEffect(() => () => stopClip(), []);
+  useEffect(() => () => { stopClip(); setInstrumental(false); }, []);
+  // Modo instrumental: se aplica a toda la sala según los ajustes.
+  useEffect(() => { setInstrumental(room.settings.instrumental); }, [room.settings.instrumental]);
 
   // Cuenta regresiva.
   useEffect(() => {
@@ -181,7 +183,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
             </button>
           )}
           {round.phase === 'answering' && audio !== 'blocked' && (
-            <p>{waitingOthers ? 'Respuesta enviada. Esperando al resto…' : round.clip.seconds < 2 ? '⚡ Modo 1 segundo: ¿qué canción era?' : '¿Qué canción es?'} <span className="kbd-hint">Teclas 1–4</span></p>
+            <p>{waitingOthers ? 'Respuesta enviada. Esperando al resto…' : round.clip.seconds < ROUND_MS / 1000 ? `⚡ Fragmento de ${round.clip.seconds} s${room.settings.instrumental ? ' sin voz' : ''}: ¿qué canción era?` : room.settings.instrumental ? '🎹 Solo instrumental: ¿qué canción es?' : '¿Qué canción es?'} <span className="kbd-hint">Teclas 1–4</span></p>
           )}
           {round.phase === 'reveal' && reveal && <RevealLine reveal={reveal} result={myResult} />}
         </div>
@@ -231,7 +233,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
                 <span className="chip__name">{p.nickname}{p.isHost ? ' ♛' : ''}</span>
                 <span className="chip__score"><CountUp value={p.score} /></span>
                 {round.phase === 'answering' && <span className="chip__state">{p.answered ? '✓ respondió' : p.connected ? '…' : 'sin conexión'}</span>}
-                {round.phase === 'reveal' && r && <span className="chip__state">{r.correct ? `+${r.points}` : r.timedOut ? '⏱ 0' : '✗ 0'}</span>}
+                {round.phase === 'reveal' && r && <span className="chip__state">{r.correct ? `${r.lightning ? '⚡' : ''}+${r.points} · ${((r.ms ?? 0) / 1000).toLocaleString('es', { maximumFractionDigits: 1 })} s` : r.timedOut ? '⏱ 0' : `✗ 0${r.ms != null ? ` · ${(r.ms / 1000).toLocaleString('es', { maximumFractionDigits: 1 })} s` : ''}`}</span>}
               </li>
             );
           })}

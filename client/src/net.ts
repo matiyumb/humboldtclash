@@ -35,7 +35,25 @@ export const store = {
   setNickname: (n: string) => safeSet('hc.nickname', n),
   room: () => safeGet('hc.room'),
   setRoom: (code: string | null) => safeSet('hc.room', code),
+  username: () => safeGet('hc.username'),
 };
+
+// ---------- Cuenta ----------
+const accountListeners = new Set<(u: string | null) => void>();
+export const onAccount = (fn: (u: string | null) => void) => { accountListeners.add(fn); return () => { accountListeners.delete(fn); }; };
+/** Al iniciar sesión, este navegador adopta la identidad de la cuenta (puntos, rango, MMR). */
+export function setSession(username: string | null, id?: Identity) {
+  if (id) { memoryIdentity = id; safeSet('hc.identity', JSON.stringify(id)); }
+  if (!username) { memoryIdentity = { playerId: randomId(), secret: randomId(24) }; safeSet('hc.identity', JSON.stringify(memoryIdentity)); }
+  safeSet('hc.username', username);
+  if (username) safeSet('hc.nickname', username);
+  accountListeners.forEach((l) => l(username));
+}
+
+export async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json() as Promise<T>;
+}
 
 export const socket: Socket = io({ autoConnect: true, reconnectionDelay: 500, reconnectionDelayMax: 3000 });
 

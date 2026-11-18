@@ -1,4 +1,4 @@
-import { DIFFICULTIES, MAX_ROUNDS, MIN_ROUNDS, type GameSettings } from '../../../shared/types';
+import { CLIP_CHOICES, DIFFICULTIES, FULL_CLIP, MAX_ROUNDS, MIN_ROUNDS, type GameSettings } from '../../../shared/types';
 
 interface Props {
   value: GameSettings;
@@ -48,11 +48,22 @@ export function SettingsForm({ value, onChange, showShuffle = true }: Props) {
         </div>
       </fieldset>
 
+      <fieldset className="settings__row">
+        <legend className="settings__label">Duración del fragmento</legend>
+        <div className="chips-row" role="radiogroup" aria-label="Duración del fragmento">
+          {CLIP_CHOICES.map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={value.clipSeconds === s} className={`chip-opt ${value.clipSeconds === s ? 'is-on' : ''}`} disabled={ro} onClick={() => set({ clipSeconds: s })}>
+              {s === FULL_CLIP ? 'Completo' : `${s} s`}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <div className="settings__toggles">
         <label className="switch">
-          <input type="checkbox" checked={value.clip === 'one'} disabled={ro} onChange={(e) => set({ clip: e.target.checked ? 'one' : 'normal' })} />
+          <input type="checkbox" checked={value.instrumental} disabled={ro} onChange={(e) => set({ instrumental: e.target.checked })} />
           <span className="switch__track" aria-hidden="true" />
-          <span><b>Modo 1 segundo</b><small>La canción suena solo un instante</small></span>
+          <span><b>Solo instrumental</b><small>Quita la voz (efecto karaoke): ¡más difícil!</small></span>
         </label>
         {showShuffle && (
           <label className="switch">

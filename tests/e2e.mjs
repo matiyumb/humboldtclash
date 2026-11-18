@@ -59,7 +59,7 @@ log('\n▶ Partida en solitario (escritorio)');
   const names = await page.$$eval('.grid .card .card__name', (els) => els.map((e) => e.textContent));
   check(names[0] === 'Marea Baja' && !names.includes('Luna Brava'), `el buscador filtra las tarjetas (${names.join(', ')})`);
   await page.fill('input[type=search]', '');
-  await page.click('text=Jugar solo');
+  await page.click('text=Practicar solo');
   await page.click('.card:has-text("Marea Baja")');
   await page.waitForSelector('.banner--error');
   check(/Solo hay 6/.test(await page.textContent('.setup__status')), 'Marea Baja (6 pistas) se rechaza: hacen falta 10');
@@ -161,7 +161,7 @@ log('\n▶ Partida en solitario (escritorio)');
   check(await roundIndex(page) === 1, '«Jugar otra vez» reinicia en la ronda 1');
   page.once('dialog', (d) => d.accept());
   await page.click('text=Abandonar');
-  await page.waitForSelector('.hero');
+  await page.waitForSelector('.mode-tabs');
   check(true, '«Abandonar» vuelve al inicio');
   await ctx.close();
 }
@@ -174,12 +174,12 @@ log('\n▶ Partida en solitario con Deezer (Omar Courtz)');
   watch(page, 'deezer');
   await page.goto(BASE);
   await page.fill('#nickname', 'Mati');
-  await page.waitForSelector('.picker__title:has-text("Destacados")');
-  const feat = await page.$$eval('.picker__section:has(.picker__title:has-text("Destacados")) .card__name', (els) => els.map((e) => e.textContent));
-  check(['Bad Bunny', 'Quevedo', 'Omar Courtz'].every((n) => feat.includes(n)), `destacados de Deezer: ${feat.join(', ')}`);
+  await page.waitForSelector('.picker__title:has-text("Lo más sonado")');
+  const feat = await page.$$eval('.picker__section:has(.picker__title:has-text("Lo más sonado")) .card__name', (els) => els.map((e) => e.textContent));
+  check(['Bad Bunny', 'Quevedo', 'Omar Courtz'].every((n) => feat.includes(n)), `artistas más sonados de la semana (Deezer): ${feat.join(', ')}`);
   await page.screenshot({ path: `${SHOTS}/09-inicio-deezer.png`, fullPage: true });
   await page.fill('input[type=search]', 'quevedo');
-  await page.waitForSelector('.picker__section:has-text("Resultados") .card:has-text("Quevedo"), .picker__section:has-text("Destacados") .card:has-text("Quevedo")');
+  await page.waitForSelector('.picker__section:has-text("Resultados") .card:has-text("Quevedo"), .picker__section:has-text("Lo más sonado") .card:has-text("Quevedo")');
   check(true, 'la búsqueda encuentra a Quevedo en Deezer');
   await page.fill('input[type=search]', '');
   await page.click('.card:has-text("Omar Courtz")');
@@ -212,7 +212,7 @@ log('\n▶ Partida en solitario con Deezer (Omar Courtz)');
   check(audioReqs.length > 0 && audioReqs.every((u) => !/dzcdn|deezer|preview|4100/.test(u)), 'el navegador nunca ve la URL de Deezer');
   page.once('dialog', (d) => d.accept());
   await page.click('text=Abandonar');
-  await page.waitForSelector('.hero');
+  await page.waitForSelector('.mode-tabs');
   await ctx.close();
 }
 
@@ -250,17 +250,25 @@ log('\n▶ Playlist propia, 5 rondas Nicho en modo 1 segundo, perfil, ranking, t
   await page.waitForFunction(() => document.querySelectorAll('.song-list--mine li').length === 10);
   check(/2 artistas/.test(await page.textContent('.mix-editor__listhead')), 'playlist con 10 canciones de 2 artistas al azar');
   const before = await page.$$eval('.song-list--mine .song-list__txt b', (e) => e.map((x) => x.textContent).join('|'));
+  // Importar una lista pegada (Artista - Canción)
+  await page.click('.import summary');
+  await page.fill('.import__text', 'Quevedo - Columbia\nQuevedo - Punto G\nNadie - Canción Inventada');
+  await page.click('.import button:has-text("Importar")');
+  await page.waitForSelector('.import .muted:has-text("añadidas")', { timeout: 10000 });
+  check(/2 añadidas · no encontradas: Nadie - Canción Inventada/.test(await page.textContent('.import')), 'importar lista: 2 encontradas y 1 que no existe');
+  await page.waitForFunction(() => document.querySelectorAll('.song-list--mine li').length === 12);
   await page.click('button:has-text("🎲 Barajar")');
   const after = await page.$$eval('.song-list--mine .song-list__txt b', (e) => e.map((x) => x.textContent).join('|'));
   check(before !== after || before.split('|').length < 2, 'barajar cambia el orden');
   await page.screenshot({ path: `${SHOTS}/15-playlist.png` });
   await page.click('button:has-text("Guardar y jugar")');
 
-  // Ajustes: 5 rondas, Nicho, modo 1 segundo
+  // Ajustes: 5 rondas, Nicho, fragmento de 2 s, solo instrumental
   await page.waitForSelector('.selected-line:has-text("Perreo del recreo")');
   await page.locator('.settings input[type=range]').fill('5');
   await page.click('.segmented__opt:has-text("Nicho")');
-  await page.click('.switch:has-text("Modo 1 segundo")');
+  await page.click('.chip-opt:has-text("2 s")');
+  await page.click('.switch:has-text("Solo instrumental")');
   await page.waitForFunction(() => /5 rondas/.test(document.querySelector('.setup__status')?.textContent ?? ''), null, { timeout: 8000 });
   check(true, 'catálogo verificado para 5 rondas en nivel Nicho');
   await page.screenshot({ path: `${SHOTS}/16-ajustes.png` });
@@ -270,20 +278,23 @@ log('\n▶ Playlist propia, 5 rondas Nicho en modo 1 segundo, perfil, ranking, t
   for (let r = 1; r <= 5; r++) {
     await waitAnswering(page, 20000);
     check((await page.textContent('.hud__item .hud__value')).includes('/5'), `ronda ${r}/5`);
-    if (r === 1) check(/Modo 1 segundo/.test(await page.textContent('.stage__status')), 'aviso de modo 1 segundo');
+    if (r === 1) check(/Fragmento de 2 s sin voz/.test(await page.textContent('.stage__status')), 'aviso: fragmento de 2 s en modo instrumental');
     const sol = await answer(code);
     await page.click(`.answer:has-text("${sol.title}")`);
     await waitReveal(page);
   }
   await page.waitForSelector('.score-big', { timeout: 8000 });
   check(/5<\/b> aciertos de 5|5 aciertos de 5/.test(await page.innerHTML('.results__hits')), '5 aciertos de 5');
-  check(await page.isVisible('.win-flag'), 'cuenta como victoria');
-  await page.waitForSelector('.profile', { timeout: 5000 });
-  check(/1\s*victoria/.test(await page.textContent('.profile')), 'el perfil suma la victoria');
-  await page.screenshot({ path: `${SHOTS}/17-resultado-victoria.png` });
+  check(!(await page.isVisible('.win-flag')) && /Modo práctica/.test(await page.textContent('.results')), 'el modo solo es práctica: no suma victorias');
+  check(/respondes en/.test(await page.textContent('.results__hits')), 'muestra el tiempo medio de respuesta');
+  await page.screenshot({ path: `${SHOTS}/17-resultado-practica.png` });
   await page.click('text=Volver al inicio');
-  await page.waitForSelector('.leaders li:has-text("Mati")', { timeout: 8000 });
-  check(true, 'Mati aparece en el ranking global');
+  await page.waitForSelector('.mode-tabs');
+  // El logo lleva al inicio
+  await page.click('.mixes-cta');
+  await page.click('.logo-btn');
+  await page.waitForSelector('.mode-tabs');
+  check(true, 'pulsar el logo vuelve al inicio');
   await ctx.close();
 }
 
@@ -326,6 +337,11 @@ log('\n▶ Partida multijugador (escritorio + móvil)');
   check(await guest.isVisible('.player:has-text("Ana") .tag--host'), 'la sala de espera muestra quién es el anfitrión');
   check((await guest.$$('.picker')).length === 0, 'el invitado no puede elegir catálogo');
   await host.click('.card:has-text("Verano Eterno")');
+  await host.click('[aria-label="Menos jugadores"]');
+  await host.click('[aria-label="Menos jugadores"]');
+  await host.waitForSelector('.stepper__value:has-text("3")');
+  await guest.waitForSelector('.h3:has-text("(2/3)")');
+  check(true, 'el anfitrión cambia el tamaño de la sala (5 → 3) y el invitado lo ve');
   await guest.waitForSelector('.lobby__catalog:has-text("Verano Eterno")');
   check(true, 'el invitado ve el catálogo elegido por el anfitrión');
   await host.screenshot({ path: `${SHOTS}/05-sala-espera.png` });
@@ -369,6 +385,7 @@ log('\n▶ Partida multijugador (escritorio + móvil)');
   check(Date.now() - t0 < 6000, 'revelación inmediata cuando todos respondieron');
   check(/Acierto|Oído biónico/.test(await host.textContent('.verdict')), 'anfitrión acierta');
   check(/Fallaste/.test(await guest.textContent('.verdict')), 'invitado falla');
+  check(/\d s/.test(await host.textContent('.chip:has-text("Ana") .chip__state')), 'la revelación muestra cuánto tardó cada jugador');
   await host.screenshot({ path: `${SHOTS}/07-revelacion-multi.png` });
 
   // Ronda 2: el invitado no responde → revelación al agotarse el tiempo.
@@ -430,17 +447,66 @@ log('\n▶ Partida multijugador (escritorio + móvil)');
   log('  tabla:', JSON.stringify(rows));
   check(rows.length === 2 && rows[0][0] === '1º', 'tabla con posición, apodo, puntaje y aciertos');
   check(rows.every((r) => /\/10$/.test(r[3])), 'aciertos sobre 10');
+  check(rows.every((r) => /s$|—/.test(r[4])), 'tiempo medio de respuesta por jugador');
   check(await host.isDisabled('button:has-text("Jugar otra vez")'), 'Ana (ya no anfitriona) espera al anfitrión para repetir');
   await guest.click('button:has-text("Jugar otra vez")');
   await host.waitForSelector('.code--big');
   await guest.waitForSelector('.code--big');
   check(true, '«Jugar otra vez» devuelve a ambos a la sala de espera');
   await guest.click('text=Salir de la sala');
-  await guest.waitForSelector('.hero');
+  await guest.waitForSelector('.mode-tabs');
   check(true, 'salir de la sala vuelve al inicio');
   await host.waitForSelector('.player:has-text("Ana") .tag--host');
   check(true, 'al salir el anfitrión, Ana recupera la función de anfitriona');
   await hostCtx.close(); await guestCtx.close();
+}
+
+// ───────────────────────── COMPETITIVO 1v1 ─────────────────────────
+log('\n▶ Competitivo 1v1: cuentas, emparejamiento y MMR');
+{
+  const ctxA = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+  const ctxB = await browser.newContext({ ...devices['iPhone 13'] });
+  const a = await ctxA.newPage();
+  const b = await ctxB.newPage();
+  watch(a, 'duelo A'); watch(b, 'duelo B');
+  const run = Date.now().toString(36).slice(-5);
+  for (const [pg, name] of [[a, `Ana${run}`], [b, `Beto${run}`]]) {
+    await pg.goto(BASE);
+    await pg.click('.mode-tabs button:has-text("Competitivo")');
+    await pg.waitForSelector('.ranked form.account');
+    await pg.fill('.ranked .account input[autocomplete="username"]', name);
+    await pg.fill('.ranked .account input[type=password]', 'clave-segura-1');
+    await pg.click('.ranked .account button:has-text("Crear cuenta")');
+    await pg.waitForSelector('.ranked__mmr');
+  }
+  check(true, 'dos jugadores crean su cuenta desde la pestaña Competitivo');
+  await a.click('button:has-text("Buscar rival")');
+  await a.waitForSelector('.searching');
+  await a.screenshot({ path: `${SHOTS}/18-buscando-rival.png` });
+  await b.click('button:has-text("Buscar rival")');
+  await a.waitForSelector('.hud', { timeout: 15000 });
+  await b.waitForSelector('.hud', { timeout: 15000 });
+  check(true, 'emparejados en un duelo 1v1');
+  const code = await a.evaluate(() => localStorage.getItem('hc.room'));
+  for (let r = 1; r <= 10; r++) {
+    await waitAnswering(a, 25000); await waitAnswering(b, 25000);
+    const sol = await answer(code);
+    const titles = await optionTitles(b);
+    await a.click(`.answer:has-text("${sol.title}")`);
+    await b.click(`.answer:has-text("${titles.find((t) => t !== sol.title)}")`);
+    await a.waitForSelector('.verdict', { timeout: 13000 });
+  }
+  await a.waitForSelector('.mmr-change', { timeout: 15000 });
+  await b.waitForSelector('.mmr-change', { timeout: 15000 });
+  await a.waitForTimeout(1600);
+  check(/Ganaste el duelo/.test(await a.textContent('.results h1')), 'Ana gana el duelo');
+  const up = await a.textContent('.mmr-change'), down = await b.textContent('.mmr-change');
+  check(/▲ \+\d+/.test(up) && /▼ -\d+/.test(down), `MMR: Ana ${up.replace(/\s+/g, ' ')} · Beto ${down.replace(/\s+/g, ' ')}`);
+  await a.screenshot({ path: `${SHOTS}/19-duelo-ganado.png` });
+  await a.click('text=Volver al inicio');
+  await a.waitForSelector(`.ranked .leaders li:has-text("Ana${run}")`, { timeout: 8000 });
+  check(true, 'aparece en el ranking competitivo');
+  await ctxA.close(); await ctxB.close();
 }
 
 await browser.close();

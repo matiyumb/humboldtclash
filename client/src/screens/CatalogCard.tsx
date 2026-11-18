@@ -4,8 +4,8 @@ import { Waveform } from '../ui';
 
 const hue = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 997, 7);
 
-export function CatalogCard({ c, onClick, selected = false, role }: { c: CatalogSummary; onClick: () => void; selected?: boolean; role?: string }) {
-  const kindLabel = c.kind === 'artist' ? 'Artista' : c.kind === 'collection' ? 'Colección' : c.kind === 'playlist' ? 'Playlist' : 'Mezcla';
+export function CatalogCard({ c, onClick, selected = false, role, index = 0 }: { c: CatalogSummary; onClick: () => void; selected?: boolean; role?: string; index?: number }) {
+  const kindLabel = c.kind === 'artist' ? 'Artista' : c.kind === 'collection' ? 'Colección' : c.kind === 'playlist' ? 'Playlist' : c.kind === 'mix' ? 'Tu playlist' : 'Mezcla';
   const meta =
     c.trackCount === null
       ? c.subtitle
@@ -19,6 +19,7 @@ export function CatalogCard({ c, onClick, selected = false, role }: { c: Catalog
       onClick={onClick}
       role={role}
       aria-checked={role === 'radio' ? selected : undefined}
+      style={{ ['--i' as string]: Math.min(index, 10) }}
     >
       <span className={`card__art ${c.picture ? 'card__art--photo' : ''}`} aria-hidden="true">
         {c.picture ? <img src={c.picture} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <Waveform bars={18} seed={hue(c.id)} />}

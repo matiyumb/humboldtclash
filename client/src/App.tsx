@@ -10,6 +10,7 @@ import { Game } from './screens/Game';
 import { Results } from './screens/Results';
 import { Intro } from './screens/Intro';
 import { Mixes } from './screens/Mixes';
+import type { HomeTab } from './screens/Home';
 import { Banner, CornerControls, Logo } from './ui';
 
 type View = { name: 'home' } | { name: 'setup'; initial: CatalogSummary | null } | { name: 'room' } | { name: 'mixes' };
@@ -30,6 +31,9 @@ export function App() {
   const [replaced, setReplaced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [prefillCode] = useState(codeFromPath());
+  const [homeTab, setHomeTabState] = useState<HomeTab>(() => { try { return localStorage.getItem('hc.tab') === 'ranked' ? 'ranked' : 'casual'; } catch { return 'casual'; } });
+  const [autoSearch, setAutoSearch] = useState(false);
+  const setHomeTab = (t: HomeTab) => { setHomeTabState(t); setAutoSearch(false); try { localStorage.setItem('hc.tab', t); } catch { /* sin almacenamiento */ } };
   const roomCode = useRef<string | null>(null);
 
   const setNickname = (n: string) => { setNicknameState(n); store.setNickname(n); };
@@ -45,7 +49,7 @@ export function App() {
     }
   }, []);
 
-  const enterRoom = useCallback((code: string, mode: 'solo' | 'multi') => {
+  const enterRoom = useCallback((code: string, mode: 'solo' | 'multi' | 'ranked') => {
     roomCode.current = code;
     store.setRoom(code);
     const path = mode === 'multi' ? `/sala/${code}` : '/';
@@ -136,6 +140,17 @@ export function App() {
     if (r.ok) { setNotice(null); enterRoom(r.code, 'multi'); } else setNotice({ kind: 'error', text: r.error });
   };
 
+  /** El logo lleva al inicio (si estás en una sala, sales de ella; en partida, pregunta antes). */
+  const goHome = async () => {
+    if (view.name === 'room') {
+      if (room?.phase === 'playing' && !confirm('¿Abandonar la partida?')) return;
+      await leave();
+      return;
+    }
+    setNotice(null);
+    setView({ name: 'home' });
+  };
+
   const leave = async () => {
     await call('room:leave');
     exitRoom();
@@ -163,7 +178,7 @@ export function App() {
     if (!room) body = <section className="panel center"><p className="muted">Conectando con la sala…</p></section>;
     else if (room.phase === 'lobby') body = <Lobby room={room} catalogs={catalogs} onLeave={leave} />;
     else if (room.phase === 'playing') body = room.round ? <Game room={room} onLeave={leave} /> : <Intro room={room} />;
-    else body = <Results room={room} onHome={leave} />;
+    else body = <Results room={room} onHome={leave} onRanked={async () => { await leave(); setHomeTabState('ranked'); setAutoSearch(true); }} />;
   } else if (view.name === 'mixes') {
     body = <Mixes nickname={nickname} onBack={() => setView({ name: 'home' })} onPlay={(c) => setView({ name: 'setup', initial: c })} />;
   } else if (view.name === 'setup') {
@@ -182,6 +197,10 @@ export function App() {
   } else {
     body = (
       <Home
+        tab={homeTab}
+        setTab={setHomeTab}
+        autoSearch={autoSearch}
+        onRankedFound={(code) => { setAutoSearch(false); enterRoom(code, 'ranked'); }}
         catalogs={catalogs}
         catalogError={catalogError}
         onRetryCatalogs={loadCatalogs}
@@ -205,7 +224,7 @@ export function App() {
       <CornerControls />
       {!inGame && view.name !== 'home' && (
         <header className="topbar">
-          <Logo small />
+          <button className="logo-btn" onClick={goHome} aria-label="Ir al inicio"><Logo small /></button>
         </header>
       )}
       {!connected && <div className="offline" role="status">Sin conexión… reconectando</div>}

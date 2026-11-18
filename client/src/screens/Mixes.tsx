@@ -127,6 +127,25 @@ function MixEditor({ draft, nickname, onCancel, onSaved }: { draft: Draft; nickn
     return () => { clearTimeout(t); ctrl.abort(); };
   }, [q]);
 
+  const [importText, setImportText] = useState('');
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const runImport = async () => {
+    setBusy('import');
+    setImportMsg(null);
+    try {
+      const r = await fetch('/api/deezer/emparejar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: importText }) });
+      const d = (await r.json()) as { found: MixTrack[]; missing: string[] };
+      const fresh = d.found.filter((t) => !tracks.some((x) => x.deezerId === t.deezerId));
+      setTracks((x) => [...x, ...fresh].slice(0, MAX_SONGS));
+      setImportMsg(`${fresh.length} añadidas${d.missing.length ? ` · no encontradas: ${d.missing.slice(0, 3).join(', ')}${d.missing.length > 3 ? '…' : ''}` : ''}`);
+      if (fresh.length) setImportText('');
+    } catch {
+      setImportMsg('No se pudo importar. Inténtalo otra vez.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const add = (t: MixTrack) => { if (!has(t.deezerId) && tracks.length < MAX_SONGS) setTracks((x) => [...x, t]); };
 
   /** Añade N canciones al azar de un artista (las que aún no estén). */
@@ -193,6 +212,15 @@ function MixEditor({ draft, nickname, onCancel, onSaved }: { draft: Draft; nickn
             </div>
           )}
           {songs && songs.length === 0 && <p className="muted">Sin resultados.</p>}
+          <details className="import">
+            <summary>📋 Importar una lista (texto o CSV)</summary>
+            <p className="hint">Una canción por línea como <b>Artista - Canción</b>, o pega el CSV que exporta <a href="https://exportify.net" target="_blank" rel="noreferrer">Exportify</a> desde tu playlist de Spotify. La buscamos en Deezer.</p>
+            <textarea className="input import__text" rows={5} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder={'Quevedo - Columbia\nBad Bunny - Tití Me Preguntó'} />
+            <div className="row">
+              <button type="button" className="btn btn--outline btn--sm" disabled={!importText.trim() || busy === 'import'} onClick={runImport}>{busy === 'import' ? 'Buscando…' : 'Importar'}</button>
+              {importMsg && <span className="muted">{importMsg}</span>}
+            </div>
+          </details>
           <ul className="song-list">
             {songs?.map((t) => (
               <li key={t.deezerId}>

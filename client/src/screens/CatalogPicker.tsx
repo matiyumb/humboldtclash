@@ -4,8 +4,10 @@ import { CatalogCard } from './CatalogCard';
 import { mixToSummary, useMyMixes } from './Mixes';
 
 export interface Catalogs {
-  featured: CatalogSummary[];
-  local: CatalogSummary[];
+  trending: CatalogSummary[]; // artistas más sonados esta semana (Deezer)
+  playlists: CatalogSummary[]; // éxitos y playlists oficiales de Deezer
+  featured: CatalogSummary[]; // extras fijos (catalog/destacados.json)
+  local: CatalogSummary[]; // canciones propias
   deezerOnline: boolean;
 }
 
@@ -20,25 +22,34 @@ interface Props {
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+/** Detecta un enlace (o id) de playlist de Deezer pegado en el buscador. */
+export function deezerPlaylistId(q: string): number | null {
+  const m = q.match(/deezer\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?playlist\/(\d{3,15})/i) ?? q.match(/^playlist[:/](\d{3,15})$/i);
+  return m ? Number(m[1]) : null;
+}
 
-/** Buscador de artistas (Deezer + catálogo local) con tarjetas seleccionables. */
+/** Buscador de artistas (Deezer + catálogo propio) con tarjetas seleccionables. */
 export function CatalogPicker(p: Props) {
   const [query, setQuery] = useState('');
   const [remote, setRemote] = useState<CatalogSummary[] | null>(null);
+  const [linked, setLinked] = useState<CatalogSummary | null>(null);
   const [searching, setSearching] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  const plId = deezerPlaylistId(query.trim());
 
   useEffect(() => {
     const q = query.trim();
+    setLinked(null);
     if (q.length < 2) { setRemote(null); setRemoteError(null); return; }
     const ctrl = new AbortController();
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const r = await fetch(`/api/deezer/artistas?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        const url = plId ? `/api/deezer/playlist/${plId}` : `/api/deezer/artistas?q=${encodeURIComponent(q)}`;
+        const r = await fetch(url, { signal: ctrl.signal });
         const data = await r.json();
         if (!r.ok) throw new Error(data?.error ?? 'Error buscando en Deezer.');
-        setRemote(data);
+        if (plId) { setLinked(data); setRemote([]); } else setRemote(data);
         setRemoteError(null);
       } catch (e) {
         if ((e as Error).name !== 'AbortError') { setRemote([]); setRemoteError((e as Error).message || 'No se pudo buscar en Deezer.'); }
@@ -47,30 +58,40 @@ export function CatalogPicker(p: Props) {
       }
     }, 350);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [query]);
+  }, [query, plId]);
 
-  const q = norm(query.trim());
+  const q = plId ? '' : norm(query.trim());
   const filter = (list: CatalogSummary[]) => (q ? list.filter((c) => norm(c.name).includes(q) || c.artists.some((a) => norm(a).includes(q))) : list);
-  const featured = useMemo(() => filter(p.catalogs?.featured ?? []), [p.catalogs, q]);
-  const local = useMemo(() => filter(p.catalogs?.local ?? []), [p.catalogs, q]);
   const myMixesRaw = useMyMixes();
   const mine = useMemo(() => filter((myMixesRaw ?? []).map(mixToSummary)), [myMixesRaw, q]);
-  const remoteOnly = (remote ?? []).filter((r) => !featured.some((f) => f.id === r.id));
+  const trending = useMemo(() => filter(p.catalogs?.trending ?? []), [p.catalogs, q]);
+  const playlists = useMemo(() => filter(p.catalogs?.playlists ?? []), [p.catalogs, q]);
+  const featured = useMemo(() => filter(p.catalogs?.featured ?? []), [p.catalogs, q]);
+  const local = useMemo(() => filter(p.catalogs?.local ?? []), [p.catalogs, q]);
+  const shown = new Set([...trending, ...featured].map((c) => c.id));
+  const remoteOnly = (remote ?? []).filter((r) => !shown.has(r.id));
 
   const grid = (list: CatalogSummary[]) => (
     <div className="grid" role={p.radio ? 'radiogroup' : undefined}>
-      {list.map((c) => (
-        <CatalogCard key={c.id} c={c} role={p.radio ? 'radio' : undefined} selected={c.id === p.selectedId} onClick={() => p.onSelect(c)} />
+      {list.map((c, i) => (
+        <CatalogCard key={c.id} c={c} index={i} role={p.radio ? 'radio' : undefined} selected={c.id === p.selectedId} onClick={() => p.onSelect(c)} />
       ))}
     </div>
   );
+  const section = (title: React.ReactNode, list: CatalogSummary[]) =>
+    list.length > 0 && (
+      <section className="picker__section">
+        <h3 className="picker__title">{title}</h3>
+        {grid(list)}
+      </section>
+    );
 
   return (
     <div className="picker">
       <label className="search">
-        <span className="sr-only">Buscar artista</span>
+        <span className="sr-only">Buscar artista o pegar enlace de playlist</span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2.2" /><path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
-        <input type="search" className="input" placeholder="Busca cualquier artista: Quevedo, Bad Bunny…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus={p.autoFocus} />
+        <input type="search" className="input" placeholder="Busca un artista o pega un enlace de playlist de Deezer" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus={p.autoFocus} />
       </label>
 
       {p.error && (
@@ -80,40 +101,33 @@ export function CatalogPicker(p: Props) {
       )}
       {!p.catalogs && !p.error && <p className="muted">Cargando catálogo…</p>}
 
-      {q.length >= 2 && (
+      {plId && (
+        <section className="picker__section" aria-live="polite">
+          <h3 className="picker__title"><span className="dz-badge">Deezer</span> Playlist del enlace</h3>
+          {searching && !linked && <p className="muted">Abriendo la playlist…</p>}
+          {remoteError && <p className="muted">{remoteError}</p>}
+          {linked && grid([linked])}
+        </section>
+      )}
+
+      {!plId && query.trim().length >= 2 && (
         <section className="picker__section" aria-live="polite">
           <h3 className="picker__title"><span className="dz-badge">Deezer</span> Resultados</h3>
           {searching && !remote && <p className="muted">Buscando en Deezer…</p>}
           {remoteError && <p className="muted">{remoteError}</p>}
-          {remote && remoteOnly.length === 0 && featured.length === 0 && !remoteError && <p className="muted">No encontramos «{query}» en Deezer.</p>}
+          {remote && remoteOnly.length === 0 && !trending.length && !remoteError && <p className="muted">No encontramos «{query}» en Deezer.</p>}
           {remoteOnly.length > 0 && grid(remoteOnly)}
         </section>
       )}
 
-      {mine.length > 0 && (
-        <section className="picker__section">
-          <h3 className="picker__title"><span className="mix-badge">Tuyas</span> Mis playlists</h3>
-          {grid(mine)}
-        </section>
-      )}
-
-      {featured.length > 0 && (
-        <section className="picker__section">
-          <h3 className="picker__title"><span className="dz-badge">Deezer</span> Destacados</h3>
-          {grid(featured)}
-        </section>
-      )}
+      {section(<><span className="mix-badge">Tuyas</span> Mis playlists</>, mine)}
+      {section(<><span className="dz-badge">Deezer</span> Lo más sonado esta semana</>, trending)}
+      {section(<><span className="dz-badge">Deezer</span> Éxitos y playlists oficiales</>, playlists)}
+      {section('Destacados', featured)}
       {p.catalogs && !p.catalogs.deezerOnline && !q && (
-        <p className="hint">Deezer no responde ahora mismo: puedes buscar artistas igualmente o jugar con el catálogo de demostración.</p>
+        <p className="hint">Deezer no responde ahora mismo: prueba a buscar un artista o vuelve en un rato.</p>
       )}
-
-      {local.length > 0 && (
-        <section className="picker__section">
-          <h3 className="picker__title">Canciones propias</h3>
-          {grid(local)}
-        </section>
-      )}
-      {p.catalogs && q && !featured.length && !local.length && !remoteOnly.length && !searching && remote && <p className="muted">Prueba con otro nombre.</p>}
+      {section('Canciones propias', local)}
     </div>
   );
 }

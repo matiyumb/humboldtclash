@@ -12,7 +12,9 @@ const REASON = {
   voided: { icon: Icon.cross, text: 'Ronda anulada' },
 } as const;
 
-export function Results({ room, onHome }: { room: RoomState; onHome: () => void }) {
+const secs = (ms: number | null) => (ms == null ? '—' : `${(ms / 1000).toLocaleString('es', { maximumFractionDigits: 1 })} s`);
+
+export function Results({ room, onHome, onRanked }: { room: RoomState; onHome: () => void; onRanked?: () => void }) {
   const r = room.results!;
   const isHost = room.hostId === room.you;
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,8 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
         <>
           <p className="eyebrow">Resultado · {room.catalog?.name}</p>
           <h1 className="score-big" data-value={mine?.score ?? 0}><CountUp value={mine?.score ?? 0} from={0} ms={1400} /><small> puntos</small></h1>
-          <p className="results__hits"><b>{mine?.correct ?? 0}</b> aciertos de {r.totalRounds}</p>
+          <p className="results__hits"><b>{mine?.correct ?? 0}</b> aciertos de {r.totalRounds}{mine?.avgMs != null && <span className="muted"> · respondes en {secs(mine.avgMs)} de media</span>}</p>
+          <p className="practice-note">🎯 Modo práctica: no suma victorias. Las victorias se ganan en salas y en competitivo.</p>
           {r.missed.length > 0 ? (
             <div className="panel">
               <h2 className="h3">Canciones falladas</h2>
@@ -58,12 +61,20 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
         </>
       ) : (
         <>
-          <p className="eyebrow">Sala {room.code} · {room.catalog?.name}</p>
-          <h1 className="h1">Clasificación final</h1>
+          <p className="eyebrow">{room.mode === 'ranked' ? 'Competitivo 1v1' : `Sala ${room.code}`} · {room.catalog?.name}</p>
+          <h1 className="h1">{room.mode === 'ranked' ? (r.youWon ? '¡Ganaste el duelo!' : mine?.position === 1 ? 'Empate' : 'Derrota') : 'Clasificación final'}</h1>
+          {r.rating && (
+            <div className={`mmr-change ${r.rating.delta >= 0 ? 'is-up' : 'is-down'}`}>
+              <span className="mmr-change__label">MMR</span>
+              <span className="mmr-change__value"><CountUp value={r.rating.after} from={r.rating.before} ms={1400} /></span>
+              <span className="mmr-change__delta">{r.rating.delta >= 0 ? '▲ +' : '▼ '}{r.rating.delta}</span>
+            </div>
+          )}
+          {room.mode === 'ranked' && !r.rating && <p className="muted">Calculando MMR…</p>}
           <div className="panel table-wrap">
             <table className="table">
               <thead>
-                <tr><th scope="col">Pos.</th><th scope="col">Apodo</th><th scope="col" className="num">Puntaje</th><th scope="col" className="num">Aciertos</th></tr>
+                <tr><th scope="col">Pos.</th><th scope="col">Apodo</th><th scope="col" className="num">Puntaje</th><th scope="col" className="num">Aciertos</th><th scope="col" className="num">Tiempo medio</th></tr>
               </thead>
               <tbody>
                 {r.standings.map((s, i) => (
@@ -72,6 +83,7 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
                     <td>{s.nickname}{s.playerId === room.you && <span className="tag">tú</span>}{s.left && <span className="tag tag--off">se fue</span>}</td>
                     <td className="num">{s.score.toLocaleString('es')}</td>
                     <td className="num">{s.correct}/{r.totalRounds}</td>
+                    <td className="num">{secs(s.avgMs)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -94,11 +106,12 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
         </>
       )}
       {r.youWon && <p className="win-flag">🏆 ¡Victoria! Suma para tu rango</p>}
-      {!r.youWon && room.mode === 'solo' && <p className="muted">Acierta al menos el 70 % para que cuente como victoria.</p>}
-      {refresh > 0 && <ProfileCard profile={profile} highlight={r.youWon} />}
+      {refresh > 0 && room.mode !== 'solo' && <ProfileCard profile={profile} highlight={r.youWon} />}
       {error && <Banner>{error}</Banner>}
       <div className="row center results__actions">
-        {room.mode === 'solo' || isHost ? (
+        {room.mode === 'ranked' ? (
+          <button className="btn btn--primary btn--lg" onClick={onRanked}>⚔️ Buscar otro duelo</button>
+        ) : room.mode === 'solo' || isHost ? (
           <button className="btn btn--primary btn--lg" onClick={again}>Jugar otra vez</button>
         ) : (
           <button className="btn btn--primary btn--lg" disabled title="Solo el anfitrión puede reiniciar">Jugar otra vez <small>(espera al anfitrión)</small></button>

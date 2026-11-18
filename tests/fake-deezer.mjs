@@ -35,8 +35,8 @@ createServer((req, res) => {
   const p = url.pathname;
   let m;
   if (p === '/search') {
-    const q = (url.searchParams.get('q') ?? '').toLowerCase();
-    const data = tracks.filter((t) => t.title.toLowerCase().includes(q) || t.artist.name.toLowerCase().includes(q)).slice(0, 25).map((t) => toApi(t));
+    const words = (url.searchParams.get('q') ?? '').toLowerCase().replace(/(artist|track):/g, ' ').replace(/"/g, ' ').split(/\s+/).filter(Boolean);
+    const data = tracks.filter((t) => { const hay = `${t.title} ${t.artist.name}`.toLowerCase(); return words.length && words.every((w) => hay.includes(w)); }).slice(0, 25).map((t) => toApi(t));
     return json(res, { data, total: data.length });
   }
   if (p === '/search/artist') {
@@ -46,6 +46,10 @@ createServer((req, res) => {
       .map(([id, a]) => ({ id: Number(id), name: a.name, nb_fan: a.fans, picture_medium: null }));
     return json(res, { data, total: data.length });
   }
+  if (p === '/chart/0/artists') return json(res, { data: Object.entries(ARTISTS).map(([id, a], i) => ({ id: Number(id), name: a.name, position: i + 1, picture_medium: null })) });
+  if (p === '/chart/0/playlists') return json(res, { data: [{ id: 777, title: 'Top Perú', nb_tracks: 20, picture_medium: null, user: { name: 'Deezer' } }] });
+  if (p === '/playlist/777') return json(res, { id: 777, title: 'Top Perú', nb_tracks: 20, creator: { name: 'Deezer' } });
+  if (p === '/playlist/777/tracks') return json(res, { data: tracks.slice(0, 20).map((t) => toApi(t)) });
   if ((m = p.match(/^\/artist\/(\d+)$/)) && ARTISTS[m[1]]) return json(res, { id: Number(m[1]), name: ARTISTS[m[1]].name });
   if ((m = p.match(/^\/artist\/(\d+)\/top$/)) && ARTISTS[m[1]]) return json(res, { data: tracks.filter((t) => t.artist.id === Number(m[1])).map((t) => toApi(t)) });
   if (p === '/chart/0/tracks') return json(res, { data: tracks.slice(0, 30).map((t) => toApi(t)) });

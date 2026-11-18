@@ -60,6 +60,11 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
     if (!r.ok) setError(r.error);
   };
 
+  const resize = async (size: number) => {
+    const r = await call('room:setSize', { size });
+    if (!r.ok) setError(r.error);
+  };
+
   const togglePublic = async () => {
     const r = await call('room:setPublic', { isPublic: !room.isPublic });
     if (!r.ok) setError(r.error);
@@ -110,6 +115,14 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
               <input type="checkbox" checked={room.isPublic} onChange={togglePublic} />
               <span>Sala pública: aparece en la lista de salas del inicio</span>
             </label>
+          )}
+          {isHost && (
+            <div className="stepper" role="group" aria-label="Tamaño de la sala">
+              <span className="stepper__label">Tamaño de la sala</span>
+              <button type="button" className="icon-btn" aria-label="Menos jugadores" disabled={room.maxPlayers <= Math.max(2, active.length)} onClick={() => resize(room.maxPlayers - 1)}>−</button>
+              <b className="stepper__value" aria-live="polite">{room.maxPlayers}</b>
+              <button type="button" className="icon-btn" aria-label="Más jugadores" disabled={room.maxPlayers >= 10} onClick={() => resize(room.maxPlayers + 1)}>+</button>
+            </div>
           )}
         </div>
 
