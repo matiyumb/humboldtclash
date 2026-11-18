@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { MIN_TRACKS, type CatalogCheck, type CatalogSummary, type Difficulty, type GameSettings, type MixTrack } from '../../shared/types.js';
 import { Catalog, distinctByTitle, remoteAllowed, type Track } from './catalog.js';
 import { Deezer, DeezerError } from './deezer.js';
+import type { LastFm } from './lastfm.js';
 import type { Store } from './store.js';
 
 export interface Resolved {
@@ -27,14 +28,38 @@ export function mixTrackToTrack(t: MixTrack, collection: string): Track {
   };
 }
 
+/** Por debajo de esta cobertura, los oyentes de Last.fm se ignoran y manda el «rank» de Deezer. */
+export const LASTFM_MIN_COVERAGE = 0.5;
+
 /**
- * Dificultad por popularidad (Deezer «rank»): se ordenan de más a menos escuchadas y se toma
- * el tercio de arriba (mainstream), el del medio (fan) o el de abajo (nicho). Cada tramo tiene
- * al menos tantas canciones como rondas, para que siempre se pueda jugar si el catálogo alcanza.
+ * Orden de más a menos popular. Si Last.fm conoce al menos la mitad de las canciones, manda su
+ * número de oyentes; para el resto se usa el «rank» de Deezer. Las dos escalas no se comparan
+ * directamente: cada pista recibe su percentil (0 = la menos escuchada, 1 = la más) dentro de su
+ * fuente, y se ordena por ese percentil.
+ */
+export function byPopularity(tracks: Track[]): Track[] {
+  const byRank = (a: Track, b: Track) => (b.rank ?? 0) - (a.rank ?? 0);
+  const known = tracks.filter((t) => typeof t.listeners === 'number');
+  if (!tracks.length || known.length < tracks.length * LASTFM_MIN_COVERAGE) return [...tracks].sort(byRank);
+  const pct = (list: Track[], value: (t: Track) => number) => {
+    const asc = [...list].sort((a, b) => value(a) - value(b));
+    return new Map(asc.map((t, i) => [t.id, asc.length > 1 ? i / (asc.length - 1) : 0.5]));
+  };
+  const fm = pct(known, (t) => t.listeners!);
+  const dz = pct(tracks, (t) => t.rank ?? 0);
+  const score = (t: Track) => fm.get(t.id) ?? dz.get(t.id) ?? 0;
+  return [...tracks].sort((a, b) => score(b) - score(a) || byRank(a, b));
+}
+
+/**
+ * Dificultad por popularidad (oyentes de Last.fm o «rank» de Deezer): se ordenan de más a menos
+ * escuchadas y se toma el tercio de arriba (mainstream), el del medio (fan) o el de abajo (nicho).
+ * Cada tramo tiene al menos tantas canciones como rondas, para que siempre se pueda jugar si el
+ * catálogo alcanza.
  */
 export function byDifficulty(tracks: Track[], difficulty: Difficulty, rounds: number): Track[] {
   if (difficulty === 'general' || tracks.length <= rounds) return tracks;
-  const sorted = [...tracks].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0));
+  const sorted = byPopularity(tracks);
   const n = sorted.length;
   const size = Math.min(n, Math.max(Math.ceil(n / 3), rounds));
   const ids = new Set(
@@ -58,7 +83,22 @@ export function byDifficulty(tracks: Track[], difficulty: Difficulty, rounds: nu
 export class Library {
   private featuredCache: { at: number; list: CatalogSummary[] } | null = null;
 
-  constructor(readonly local: Catalog, readonly deezer: Deezer | null, readonly store: Store | null = null) {}
+  constructor(
+    readonly local: Catalog,
+    readonly deezer: Deezer | null,
+    readonly store: Store | null = null,
+    readonly lastfm: LastFm | null = null,
+  ) {}
+
+  /** Añade los oyentes de Last.fm a las pistas remotas (si está configurado). Nunca falla. */
+  private async withListeners(tracks: Track[]): Promise<Track[]> {
+    if (!this.lastfm) return tracks;
+    const remote = tracks.filter((t) => !t.file);
+    if (!remote.length) return tracks;
+    const listeners = await this.lastfm.listenersFor(remote).catch(() => new Map<string, number>());
+    if (!listeners.size) return tracks;
+    return tracks.map((t) => (listeners.has(t.id) ? { ...t, listeners: listeners.get(t.id) } : t));
+  }
 
   private featuredConfig(): FeaturedConfig {
     const p = join(process.env.FEATURED_FILE ?? join(process.cwd(), 'catalog/destacados.json'));
@@ -145,7 +185,9 @@ export class Library {
       name = this.local.name(id);
       raw = local;
     }
-    const tracks = distinctByTitle(raw, (t) => (t.file ? true : !!t.previewUrl && remoteAllowed(t.previewUrl)));
+    let tracks = distinctByTitle(raw, (t) => (t.file ? true : !!t.previewUrl && remoteAllowed(t.previewUrl)));
+    // Last.fm solo hace falta para repartir por dificultad; en «general» se ahorran las consultas.
+    if (settings.difficulty !== 'general' && tracks.length > settings.rounds) tracks = await this.withListeners(tracks);
     return { id, name, tracks, deck: byDifficulty(tracks, settings.difficulty, settings.rounds), ordered };
   }
 

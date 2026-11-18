@@ -97,6 +97,7 @@ Para activarlos, arranca con `ADS=1` (y opcionalmente `ADS_CLIENT=<id del provee
 | `PORT` | Puerto (Render lo pone solo) |
 | `DATABASE_URL` | Postgres para guardar puntos, rangos, MMR, cuentas y playlists |
 | `DEEZER=off` | Desactiva Deezer |
+| `LASTFM_API_KEY` | Opcional. Usa los oyentes de Last.fm para repartir la dificultad (si no está, se usa la popularidad de Deezer) |
 | `ADS=1`, `ADS_CLIENT` | Activa los huecos de publicidad |
 | `CATALOG_DIR` | Carpeta con `catalog/` y `audio/` para canciones propias |
 
@@ -111,7 +112,7 @@ Por eso las playlists de Spotify se traen **importando la lista**: se exporta co
 1. Escribe tu apodo (juegas como invitado, sin cuenta).
 2. **Jugar solo:** elige un artista o una colección. Se comprueba que tenga al menos 10 canciones distintas con audio, y luego pulsas «Empezar partida».
 3. **Crear sala:** compartes el código de 6 caracteres o el enlace. El anfitrión elige el catálogo y empieza la partida.
-4. Eliges de **5 a 20 canciones** por partida, la **duración del fragmento** (1 a 5 s, o completo), el modo **solo instrumental** (quita la voz), el **tamaño de la sala** (2 a 10), la **dificultad** (General, Mainstream, Fan o Nicho, según la popularidad en Deezer) y si quieres el **modo 1 segundo**.
+4. Eliges de **5 a 20 canciones** por partida, la **duración del fragmento** (1 a 5 s, o completo), el modo **solo instrumental** (quita la voz), el **tamaño de la sala** (2 a 10), la **dificultad** (General, Mainstream, Fan o Nicho, según los oyentes en Last.fm si hay `LASTFM_API_KEY`, o la popularidad en Deezer si no) y si quieres el **modo 1 segundo**.
    Cada fragmento empieza en un punto al azar de la canción (el mismo para toda la sala).
 5. Cada canción vale de **0 a 10 puntos**: un fallo o el tiempo agotado valen 0. Un acierto vale `5 + 1 punto por cada 2 segundos que queden`, con un máximo de 10. ⚡ Si aciertas en menos de 0,4 s, ganas la insignia «Oído biónico».
 6. **Rangos por victorias multijugador:** Rookie (50, bronce), Conocedor (100, plata), Fan (500, oro) y Melófano (5000, realeza).

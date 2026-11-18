@@ -5,6 +5,7 @@
 ## Hecho
 - Juego completo: solo (práctica), salas 2–10 (privadas/públicas), competitivo 1v1 con MMR Glicko-2 **secreto**.
 - Música: Deezer (artistas tendencia de la semana, playlists oficiales, enlace de playlist, importar lista texto/CSV de Exportify).
+- Dificultad afinada con Last.fm (oyentes) si hay `LASTFM_API_KEY`; sin clave, usa el «rank» de Deezer (`server/src/lastfm.ts`).
 - Ajustes: 5–20 canciones, dificultad (general/mainstream/fan/nicho), fragmento 1–5 s o completo, instrumental, orden aleatorio.
 - Puntos 0–10 por canción; easter egg «oído biónico» (≤ 0,4 s); rangos por victorias multijugador (Rookie 50, Conocedor 100, Fan 500, Melófano 5000).
 - Cuentas (usuario + contraseña), perfiles, ranking, playlists propias, modo oscuro, volumen, sonidos, emblema propio (sin logo del colegio).
