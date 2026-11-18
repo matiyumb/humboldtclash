@@ -15,7 +15,7 @@ export const DEFAULT_ROUNDS = 10;
 /** Mínimo absoluto de canciones distintas para que un catálogo sea jugable. */
 export const MIN_TRACKS = MIN_ROUNDS;
 
-/** Easter egg «oído biónico»: acertar casi al instante vale 1000 puntos. */
+/** Easter egg «oído biónico»: acertar casi al instante (≤ 0,4 s) da el máximo y una insignia. */
 export const LIGHTNING_MS = 400;
 
 export type Difficulty = 'general' | 'mainstream' | 'fan' | 'nicho';
@@ -48,11 +48,18 @@ export function sanitizeSettings(raw: unknown): GameSettings {
   };
 }
 
+/** Puntos por canción: 0 a 10. */
+export const MAX_POINTS = 10;
+
+/**
+ * 0 a 10 puntos por canción. Fallo o tiempo agotado: 0.
+ * Acierto: 5 + 1 punto por cada 2 segundos que queden (redondeado), máximo 10.
+ * Responder en el primer segundo da 10; el «oído biónico» (≤ 0,4 s) también.
+ */
 export function scoreFor(correct: boolean, remainingMs: number, elapsedMs = Infinity): number {
   if (!correct) return 0;
-  if (elapsedMs <= LIGHTNING_MS) return 1000;
-  const fullSeconds = Math.max(0, Math.floor(remainingMs / 1000));
-  return Math.min(1000, 500 + 50 * fullSeconds);
+  if (elapsedMs <= LIGHTNING_MS) return MAX_POINTS;
+  return Math.min(MAX_POINTS, 5 + Math.round(Math.max(0, remainingMs) / 2000));
 }
 
 // ---------- Rangos por victorias ----------

@@ -124,7 +124,7 @@ log('\n▶ Partida en solitario (escritorio)');
     const pts = await pointsFromVerdict(page);
     const verdict = await page.textContent('.verdict');
     if (r % 2 === 1 && r !== 3) {
-      check(/Acierto/.test(verdict) && pts >= 500 && pts <= 1000, `acierto con ${pts} puntos`);
+      check(/Acierto|Oído biónico/.test(verdict) && pts >= 5 && pts <= 10, `acierto con ${pts} puntos`);
       check(await page.isVisible('.answer.is-correct:has-text("Correcta")'), 'la respuesta correcta se marca con icono y texto');
       correctCount++;
     } else if (r !== 3) {
@@ -132,7 +132,7 @@ log('\n▶ Partida en solitario (escritorio)');
       check(await page.isVisible('.answer.is-wrong:has-text("Tu respuesta")'), 'el error se marca con icono y texto');
     }
     if (r === 1) {
-      check(pts >= 950, `respuesta inmediata ≈ 950–1000 puntos (${pts})`);
+      check(pts === 10, `respuesta inmediata = 10 puntos (${pts})`);
       await page.screenshot({ path: `${SHOTS}/03-revelacion.png` });
     }
     total += pts;
@@ -216,6 +216,77 @@ log('\n▶ Partida en solitario con Deezer (Omar Courtz)');
   await ctx.close();
 }
 
+// ───────────────────────── PLAYLISTS, AJUSTES, PERFIL, TEMA Y VOLUMEN ─────────────────────────
+log('\n▶ Playlist propia, 5 rondas Nicho en modo 1 segundo, perfil, ranking, tema y volumen');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  watch(page, 'v3');
+  await page.goto(BASE);
+  await page.fill('#nickname', 'Mati');
+  await page.waitForSelector('.profile');
+  check(/Aprendiz/.test(await page.textContent('.profile')), 'tarjeta de perfil con rango (Aprendiz al empezar)');
+
+  await page.click('.corner-btn[aria-label*="oscuro"]');
+  check((await page.getAttribute('html', 'data-theme')) === 'dark', 'modo oscuro');
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${SHOTS}/14-inicio-oscuro.png` });
+
+  await page.click('[aria-label="Ajustar volumen"]');
+  await page.waitForSelector('.sound__panel');
+  await page.locator('.sound__panel input[type=range]').first().fill('40');
+  check((await page.evaluate(() => localStorage.getItem('hc.vol.music'))) === '0.4', 'volumen de música ajustado y guardado');
+  await page.keyboard.press('Escape');
+
+  // Playlist: dos artistas al azar + barajar
+  await page.click('.mixes-cta');
+  await page.click('text=+ Nueva playlist');
+  await page.fill('.mix-editor .field input', 'Perreo del recreo');
+  await page.fill('.mix-editor input[type=search]', 'bad');
+  await page.click('.artist-chip:has-text("Bad Bunny")');
+  await page.waitForFunction(() => document.querySelectorAll('.song-list--mine li').length === 5);
+  await page.fill('.mix-editor input[type=search]', 'omar');
+  await page.click('.artist-chip:has-text("Omar Courtz")');
+  await page.waitForFunction(() => document.querySelectorAll('.song-list--mine li').length === 10);
+  check(/2 artistas/.test(await page.textContent('.mix-editor__listhead')), 'playlist con 10 canciones de 2 artistas al azar');
+  const before = await page.$$eval('.song-list--mine .song-list__txt b', (e) => e.map((x) => x.textContent).join('|'));
+  await page.click('button:has-text("🎲 Barajar")');
+  const after = await page.$$eval('.song-list--mine .song-list__txt b', (e) => e.map((x) => x.textContent).join('|'));
+  check(before !== after || before.split('|').length < 2, 'barajar cambia el orden');
+  await page.screenshot({ path: `${SHOTS}/15-playlist.png` });
+  await page.click('button:has-text("Guardar y jugar")');
+
+  // Ajustes: 5 rondas, Nicho, modo 1 segundo
+  await page.waitForSelector('.selected-line:has-text("Perreo del recreo")');
+  await page.locator('.settings input[type=range]').fill('5');
+  await page.click('.segmented__opt:has-text("Nicho")');
+  await page.click('.switch:has-text("Modo 1 segundo")');
+  await page.waitForFunction(() => /5 rondas/.test(document.querySelector('.setup__status')?.textContent ?? ''), null, { timeout: 8000 });
+  check(true, 'catálogo verificado para 5 rondas en nivel Nicho');
+  await page.screenshot({ path: `${SHOTS}/16-ajustes.png` });
+  await page.click('button:has-text("Empezar partida")');
+  await page.waitForSelector('.hud', { timeout: 15000 });
+  const code = await page.evaluate(() => localStorage.getItem('hc.room'));
+  for (let r = 1; r <= 5; r++) {
+    await waitAnswering(page, 20000);
+    check((await page.textContent('.hud__item .hud__value')).includes('/5'), `ronda ${r}/5`);
+    if (r === 1) check(/Modo 1 segundo/.test(await page.textContent('.stage__status')), 'aviso de modo 1 segundo');
+    const sol = await answer(code);
+    await page.click(`.answer:has-text("${sol.title}")`);
+    await waitReveal(page);
+  }
+  await page.waitForSelector('.score-big', { timeout: 8000 });
+  check(/5<\/b> aciertos de 5|5 aciertos de 5/.test(await page.innerHTML('.results__hits')), '5 aciertos de 5');
+  check(await page.isVisible('.win-flag'), 'cuenta como victoria');
+  await page.waitForSelector('.profile', { timeout: 5000 });
+  check(/1\s*victoria/.test(await page.textContent('.profile')), 'el perfil suma la victoria');
+  await page.screenshot({ path: `${SHOTS}/17-resultado-victoria.png` });
+  await page.click('text=Volver al inicio');
+  await page.waitForSelector('.leaders li:has-text("Mati")', { timeout: 8000 });
+  check(true, 'Mati aparece en el ranking global');
+  await ctx.close();
+}
+
 // URL caducada: el servidor debe pedir una nueva a Deezer (/track/:id) y servir el audio igual.
 {
   const r = await fetch(`${BASE}/api/catalogs/deezer:artist:3/check`).then((x) => x.json());
@@ -294,7 +365,7 @@ log('\n▶ Partida multijugador (escritorio + móvil)');
   await guest.dblclick(`.answer:has-text("${wrong}")`);
   await host.waitForSelector('.verdict'); await guest.waitForSelector('.verdict');
   check(Date.now() - t0 < 6000, 'revelación inmediata cuando todos respondieron');
-  check(/Acierto/.test(await host.textContent('.verdict')), 'anfitrión acierta');
+  check(/Acierto|Oído biónico/.test(await host.textContent('.verdict')), 'anfitrión acierta');
   check(/Fallaste/.test(await guest.textContent('.verdict')), 'invitado falla');
   await host.screenshot({ path: `${SHOTS}/07-revelacion-multi.png` });
 

@@ -7,7 +7,7 @@ Se juega solo o en salas privadas de 2 a 5 amigos, en el móvil o en el ordenado
 - **Servidor:** Node.js + Express + Socket.IO (sincroniza las salas y valida respuestas y puntos)
 - **Música real vía Deezer:** cualquier artista se busca desde el juego (Quevedo, Bad Bunny, Omar Courtz…). El servidor usa la API pública de Deezer y reproduce las **vistas previas oficiales de 30 s** como proxy, con identificadores opacos. No hace falta clave.
 - **Salas:** privadas (con código o enlace) o **públicas** (aparecen en la lista del inicio)
-- **Catálogo de demo sin conexión:** 41 pistas originales generadas por código (licencia CC0)
+- **Catálogo de prueba:** 41 pistas originales (CC0) en `tests/fixtures`, solo para las pruebas automáticas
 
 ### API propia (sobre la de Deezer)
 
@@ -63,13 +63,29 @@ Para cambiar el puerto, usa `PORT=8080 npm start`.
 
   Las salas se guardan en memoria, así que usa **una sola instancia**. Si el servidor se reinicia, las salas abiertas se pierden.
 
+## Guardar puntos, rangos y playlists (base de datos)
+
+Sin base de datos, los puntos y playlists se guardan en un archivo que **Render gratis borra en cada despliegue**.
+Para que duren para siempre, conecta un Postgres gratis de **Neon**:
+
+1. Entra en **neon.tech** → *Sign up* (puedes usar GitHub) → crea un proyecto.
+2. Copia la **connection string** (empieza por `postgres://…`).
+3. En Render → tu servicio → **Environment** → añade `DATABASE_URL` con ese valor → *Save*.
+
+Las tablas se crean solas al arrancar. En `/api/health`, el campo `store` dice `postgres` cuando todo está bien.
+
 ## Cómo se juega
 
 1. Escribe tu apodo (juegas como invitado, sin cuenta).
 2. **Jugar solo:** elige un artista o una colección. Se comprueba que tenga al menos 10 canciones distintas con audio, y luego pulsas «Empezar partida».
 3. **Crear sala:** compartes el código de 6 caracteres o el enlace. El anfitrión elige el catálogo y empieza la partida.
-4. Hay 10 rondas de 10 segundos. Un acierto vale `500 + 50 × segundos completos restantes`, con un máximo de 1000. Un error o el tiempo agotado valen 0.
-5. En el ordenador, las teclas **1–4** eligen la respuesta.
+4. Eliges de **5 a 20 canciones** por partida, la **dificultad** (General, Mainstream, Fan o Nicho, según la popularidad en Deezer) y si quieres el **modo 1 segundo**.
+   Cada fragmento empieza en un punto al azar de la canción (el mismo para toda la sala).
+5. Cada canción vale de **0 a 10 puntos**: un fallo o el tiempo agotado valen 0. Un acierto vale `5 + 1 punto por cada 2 segundos que queden`, con un máximo de 10. ⚡ Si aciertas en menos de 0,4 s, ganas la insignia «Oído biónico».
+6. **Rangos por victorias:** Rookie (50, bronce), Conocedor (100, plata), Fan (500, oro) y Melófano (5000, realeza).
+   Una victoria es quedar 1.º en multijugador, o acertar al menos el 70 % en solitario.
+7. **Mis playlists:** mezcla canciones de varios artistas, rellénalas al azar («🎲 5 al azar») y bárajalas.
+8. En el ordenador, las teclas **1–4** eligen la respuesta.
 
 ## Estructura
 
@@ -105,7 +121,7 @@ Necesita Playwright con Chromium instalado.
 2. Arranca el servidor en modo de prueba. Este modo expone las respuestas, así que **nunca lo uses en producción**.
 
    ```bash
-   npm run build && DEEZER_API_BASE=http://127.0.0.1:4100 HUMBOLDTCLASH_TEST=1 PORT=3100 npm start
+   npm run build && CATALOG_DIR=tests/fixtures DEEZER_API_BASE=http://127.0.0.1:4100 HUMBOLDTCLASH_TEST=1 PORT=3100 npm start
    ```
 
 3. En otra terminal, lanza la prueba:

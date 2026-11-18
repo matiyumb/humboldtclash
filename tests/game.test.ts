@@ -38,12 +38,12 @@ function setup() {
 }
 
 describe('puntuación', () => {
-  it('sigue la fórmula 500 + 50 × segundos completos, máximo 1000', () => {
-    expect(scoreFor(true, 10_000)).toBe(1000);
-    expect(scoreFor(true, 9_999)).toBe(950);
-    expect(scoreFor(true, 4_500)).toBe(700);
-    expect(scoreFor(true, 999)).toBe(500);
-    expect(scoreFor(true, 0)).toBe(500);
+  it('0 a 10 puntos: 5 + 1 por cada 2 s restantes, máximo 10', () => {
+    expect(scoreFor(true, 10_000)).toBe(10);
+    expect(scoreFor(true, 9_999)).toBe(10);
+    expect(scoreFor(true, 4_500)).toBe(7);
+    expect(scoreFor(true, 999)).toBe(5);
+    expect(scoreFor(true, 0)).toBe(5);
     expect(scoreFor(false, 9_000)).toBe(0);
   });
   it('los empates comparten posición', () => {
@@ -98,12 +98,12 @@ describe('partidas', () => {
       st = last.get('s1')!;
       expect(st.round!.phase).toBe('reveal');
       expect(st.round!.reveal!.correctOptionId).toBe(correct);
-      expect(st.round!.yourAnswer!.points).toBe(i % 2 ? 850 : 0);
+      expect(st.round!.yourAnswer!.points).toBe(i % 2 ? 9 : 0);
       vi.advanceTimersByTime(REVEAL_PAUSE_MS);
     }
     const st = last.get('s1')!;
     expect(st.phase).toBe('results');
-    expect(st.results!.standings[0].score).toBe(5 * 850);
+    expect(st.results!.standings[0].score).toBe(5 * 9);
     expect(st.results!.standings[0].correct).toBe(5);
     expect(st.results!.missed).toHaveLength(5);
   });
@@ -203,7 +203,7 @@ describe('partidas', () => {
     const st = last.get('b')!;
     expect(st.phase).toBe('results');
     expect(st.results!.standings.map((s) => s.position)).toEqual([1, 1]);
-    expect(st.results!.standings[0].score).toBe(10_000);
+    expect(st.results!.standings[0].score).toBe(100);
   });
 });
 
@@ -281,9 +281,9 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
     expect(rankFor(9999).next).toBeNull();
   });
 
-  it('easter egg: acertar casi al instante vale 1000', () => {
-    expect(scoreFor(true, 9_700, 300)).toBe(1000);
-    expect(scoreFor(true, 9_500, LIGHTNING_MS + 100)).toBe(950);
+  it('easter egg: acertar casi al instante da el máximo (10)', () => {
+    expect(scoreFor(true, 9_700, 300)).toBe(10);
+    expect(scoreFor(true, 6_000, LIGHTNING_MS + 3_600)).toBe(8);
     expect(scoreFor(false, 9_900, 100)).toBe(0);
   });
 
@@ -319,8 +319,8 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
       gm.answer('s1', st.round!.questionId, gm._debugCorrect(code));
       st = last.get('s1')!;
       const res = st.round!.reveal!.results[0];
-      if (i === 1) { expect(res.lightning).toBe(true); expect(res.points).toBe(1000); }
-      else { expect(res.lightning).toBe(false); expect(res.points).toBe(900); }
+      if (i === 1) { expect(res.lightning).toBe(true); expect(res.points).toBe(10); }
+      else { expect(res.lightning).toBe(false); expect(res.points).toBe(9); }
       vi.advanceTimersByTime(REVEAL_PAUSE_MS);
     }
     const st = last.get('s1')!;
@@ -329,7 +329,7 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
     expect(st.results!.youWon).toBe(true);
     await vi.runAllTimersAsync();
     const p = await store.profile(id('z').playerId);
-    expect(p).toMatchObject({ games: 1, wins: 1, points: 1000 + 4 * 900, correct: 5, best: 4600 });
+    expect(p).toMatchObject({ games: 1, wins: 1, points: 10 + 4 * 9, correct: 5, best: 46 });
   });
 
   it('playlist de usuario: respeta el orden si no se baraja', async () => {

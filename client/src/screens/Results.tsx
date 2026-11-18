@@ -4,6 +4,7 @@ import { call } from '../net';
 import { unlockAudio } from '../audio';
 import { sfx } from '../sfx';
 import { Banner, Confetti, CountUp, Icon, Waveform } from '../ui';
+import { ProfileCard, useProfile } from './Profile';
 
 const REASON = {
   wrong: { icon: Icon.cross, text: 'Fallaste' },
@@ -16,8 +17,12 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
   const isHost = room.hostId === room.you;
   const [error, setError] = useState<string | null>(null);
   const mine = r.standings.find((s) => s.playerId === room.you);
-  const celebrate = room.mode === 'solo' ? (mine?.correct ?? 0) >= 7 : mine?.position === 1;
+  const celebrate = r.youWon;
   useEffect(() => { sfx.fanfare(); }, []);
+  // El perfil se guarda en el servidor al terminar: se vuelve a pedir tras un momento.
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setRefresh(1), 900); return () => clearTimeout(t); }, []);
+  const profile = useProfile(refresh);
 
   const again = async () => {
     unlockAudio();
@@ -88,6 +93,9 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
           )}
         </>
       )}
+      {r.youWon && <p className="win-flag">🏆 ¡Victoria! Suma para tu rango</p>}
+      {!r.youWon && room.mode === 'solo' && <p className="muted">Acierta al menos el 70 % para que cuente como victoria.</p>}
+      {refresh > 0 && <ProfileCard profile={profile} highlight={r.youWon} />}
       {error && <Banner>{error}</Banner>}
       <div className="row center results__actions">
         {room.mode === 'solo' || isHost ? (

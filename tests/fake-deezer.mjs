@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 const PORT = Number(process.argv[2] ?? 4100);
 const BASE = `http://127.0.0.1:${PORT}`;
-const AUDIO = join(process.cwd(), 'audio');
+const AUDIO = join(process.cwd(), 'tests/fixtures/audio');
 const mp3s = readdirSync(AUDIO).filter((f) => f.endsWith('.mp3')).sort();
 
 const ARTISTS = {
@@ -25,7 +25,7 @@ const toApi = (t, fresh = false) => ({
   id: t.id, title: t.title, title_short: t.title, readable: true,
   preview: `${BASE}/preview/${t.id}.mp3${t.id === EXPIRED && !fresh ? '?hdnea=exp=1' : '?hdnea=ok'}`,
   link: `https://www.deezer.com/track/${t.id}`,
-  artist: t.artist, album: { title: 'Álbum', cover_medium: `${BASE}/cover/${t.id}.svg` },
+  rank: 1_000_000 - (t.id % 1000) * 70_000, artist: t.artist, album: { title: 'Álbum', cover_medium: `${BASE}/cover/${t.id}.svg` },
 });
 
 const json = (res, data, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
@@ -34,6 +34,11 @@ createServer((req, res) => {
   const url = new URL(req.url, BASE);
   const p = url.pathname;
   let m;
+  if (p === '/search') {
+    const q = (url.searchParams.get('q') ?? '').toLowerCase();
+    const data = tracks.filter((t) => t.title.toLowerCase().includes(q) || t.artist.name.toLowerCase().includes(q)).slice(0, 25).map((t) => toApi(t));
+    return json(res, { data, total: data.length });
+  }
   if (p === '/search/artist') {
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
     const data = Object.entries(ARTISTS)

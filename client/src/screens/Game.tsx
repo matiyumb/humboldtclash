@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ROUND_MS, type RoomState } from '../../../shared/types';
 import { call, serverNow, socket } from '../net';
-import { loadClip, onAudioStatus, playClip, stopClip, unlockAudio, type AudioStatus } from '../audio';
+import { fragmentStart, loadClip, onAudioStatus, playClip, stopClip, unlockAudio, type AudioStatus } from '../audio';
 import { sfx } from '../sfx';
-import { Banner, CountUp, Cover, Icon, Waveform } from '../ui';
+import { Banner, CountUp, Cover, Icon, RankBadge, Waveform } from '../ui';
 
 const RING = 2 * Math.PI * 26;
 
@@ -51,14 +51,20 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  // Reproducción sincronizada con el inicio de la ronda (o tarde, si reconectamos).
+  // Reproducción sincronizada: el mismo fragmento (inicio aleatorio común) para todos.
+  // Si reconectas a mitad de ronda, entra por donde va. En modo 1 s se corta al segundo.
+  const startPlayback = useCallback(() => {
+    if (!round.deadline) return;
+    const elapsed = Math.max(0, (ROUND_MS - (round.deadline - serverNow())) / 1000);
+    const left = round.clip.seconds - elapsed;
+    if (left <= 0) return;
+    const base = fragmentStart(round.clip.start, round.clip.seconds);
+    void playClip(q, base + elapsed, round.clip.seconds < ROUND_MS / 1000 ? left : undefined);
+  }, [q, round.deadline, round.clip.start, round.clip.seconds]);
   useEffect(() => {
-    if (round.phase === 'answering' && load === 'ready' && round.deadline) {
-      const elapsed = ROUND_MS - (round.deadline - serverNow());
-      if (elapsed < ROUND_MS) void playClip(q, Math.max(0, elapsed / 1000));
-    }
+    if (round.phase === 'answering' && load === 'ready' && round.deadline) startPlayback();
     if (round.phase === 'reveal') stopClip();
-  }, [round.phase, load, q, round.deadline]);
+  }, [round.phase, load, q, round.deadline, startPlayback]);
 
   useEffect(() => () => stopClip(), []);
 
@@ -97,6 +103,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
     revealedFor.current = q;
     const mine = round.reveal.results.find((r) => r.playerId === room.you);
     if (round.reveal.voided) sfx.timeout();
+    else if (mine?.lightning) sfx.lightning();
     else if (mine?.correct) sfx.correct();
     else if (mine?.timedOut) sfx.timeout();
     else sfx.wrong();
@@ -169,12 +176,12 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
             </div>
           )}
           {round.phase === 'answering' && audio === 'blocked' && (
-            <button className="btn btn--primary" onClick={() => { const el = ROUND_MS - ((round.deadline ?? 0) - serverNow()); void playClip(q, el / 1000); }}>
+            <button className="btn btn--primary" onClick={() => { unlockAudio(); startPlayback(); }}>
               {Icon.speaker} Toca para escuchar
             </button>
           )}
           {round.phase === 'answering' && audio !== 'blocked' && (
-            <p>{waitingOthers ? 'Respuesta enviada. Esperando al resto…' : '¿Qué canción es?'} <span className="kbd-hint">Teclas 1–4</span></p>
+            <p>{waitingOthers ? 'Respuesta enviada. Esperando al resto…' : round.clip.seconds < 2 ? '⚡ Modo 1 segundo: ¿qué canción era?' : '¿Qué canción es?'} <span className="kbd-hint">Teclas 1–4</span></p>
           )}
           {round.phase === 'reveal' && reveal && <RevealLine reveal={reveal} result={myResult} />}
         </div>
@@ -220,6 +227,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
             const r = reveal?.results.find((x) => x.playerId === p.id);
             return (
               <li key={p.id} className={`chip ${p.connected ? '' : 'is-off'} ${p.id === room.you ? 'is-me' : ''}`}>
+                <RankBadge rank={p.rank} compact />
                 <span className="chip__name">{p.nickname}{p.isHost ? ' ♛' : ''}</span>
                 <span className="chip__score"><CountUp value={p.score} /></span>
                 {round.phase === 'answering' && <span className="chip__state">{p.answered ? '✓ respondió' : p.connected ? '…' : 'sin conexión'}</span>}
@@ -236,7 +244,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
   );
 }
 
-function RevealLine({ reveal, result }: { reveal: NonNullable<RoomState['round']>['reveal'] & {}; result?: { correct: boolean; points: number; timedOut: boolean } }) {
+function RevealLine({ reveal, result }: { reveal: NonNullable<RoomState['round']>['reveal'] & {}; result?: { correct: boolean; points: number; timedOut: boolean; lightning: boolean; ms: number | null } }) {
   if (reveal.voided) {
     return <p className="verdict verdict--timeout">{Icon.cross}<span><b>Ronda anulada:</b> no hubo audio disponible. Nadie suma.</span></p>;
   }
@@ -246,7 +254,9 @@ function RevealLine({ reveal, result }: { reveal: NonNullable<RoomState['round']
       {reveal.link && <> · <a href={reveal.link} target="_blank" rel="noreferrer">{reveal.linkLabel ?? 'Escuchar completa'}</a></>}
     </span>
   );
-  if (result?.correct) return <p className="verdict verdict--ok">{Icon.check}<span><b>¡Acierto! +{result.points}</b>{song}</span></p>;
+  const secs = result?.ms != null ? ` en ${(result.ms / 1000).toLocaleString('es', { maximumFractionDigits: 2 })} s` : '';
+  if (result?.lightning) return <p className="verdict verdict--lightning"><span className="verdict__bolt" aria-hidden="true">⚡</span><span><b>¡Oído biónico! +{result.points}{secs}</b>{song}</span></p>;
+  if (result?.correct) return <p className="verdict verdict--ok">{Icon.check}<span><b>¡Acierto! +{result.points}{secs}</b>{song}</span></p>;
   if (result?.timedOut) return <p className="verdict verdict--timeout">{Icon.clock}<span><b>Tiempo agotado · 0</b>{song}</span></p>;
   return <p className="verdict verdict--bad">{Icon.cross}<span><b>Fallaste · 0</b>{song}</span></p>;
 }

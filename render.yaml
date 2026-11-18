@@ -10,3 +10,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # Base de datos Postgres para guardar puntos, rangos y playlists (por ejemplo Neon, gratis).
+      # Render te pedirá el valor: pega la «connection string» de Neon (postgres://...).
+      - key: DATABASE_URL
+        sync: false

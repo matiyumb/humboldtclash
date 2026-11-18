@@ -63,11 +63,40 @@ export async function loadClip(key: string, url: string, timeoutMs = 9000): Prom
   }
 }
 
-export async function playClip(key: string, offsetSec = 0) {
+// Volumen de la música (0..1), recordado en el navegador.
+let musicVolume = (() => { try { const v = Number(localStorage.getItem('hc.vol.music')); return Number.isFinite(v) && localStorage.getItem('hc.vol.music') !== null ? v : 0.9; } catch { return 0.9; } })();
+if (el) el.volume = musicVolume;
+export const getMusicVolume = () => musicVolume;
+export function setMusicVolume(v: number) {
+  musicVolume = Math.min(1, Math.max(0, v));
+  if (el) el.volume = musicVolume;
+  try { localStorage.setItem('hc.vol.music', String(musicVolume)); } catch { /* sin almacenamiento */ }
+}
+
+/** Duración del audio cargado (s), o 0 si no se conoce. */
+export const clipDuration = () => (el && Number.isFinite(el.duration) ? el.duration : 0);
+
+/**
+ * Punto de inicio del fragmento: `start` (0..1, el mismo para toda la sala) recorre la parte
+ * de la canción donde caben `seconds` segundos completos.
+ */
+export function fragmentStart(start: number, seconds: number) {
+  const d = clipDuration();
+  return Math.max(0, (d - seconds - 0.25) * Math.min(1, Math.max(0, start)));
+}
+
+let stopTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Reproduce desde `offsetSec`; si `maxSec` se indica, se corta a los `maxSec` segundos. */
+export async function playClip(key: string, offsetSec = 0, maxSec?: number) {
   if (!el || loadedFor !== key) return;
+  clearTimeout(stopTimer);
+  if (maxSec !== undefined && maxSec <= 0.05) return;
   try {
+    el.volume = musicVolume;
     el.currentTime = Math.max(0, offsetSec);
     await el.play();
+    if (maxSec !== undefined) stopTimer = setTimeout(() => stopClip(), maxSec * 1000);
     unlocked = true;
     setStatus('playing');
   } catch (e) {
@@ -77,6 +106,7 @@ export async function playClip(key: string, offsetSec = 0) {
 
 export function stopClip() {
   if (!el) return;
+  clearTimeout(stopTimer);
   el.pause();
   if (status === 'playing') setStatus('idle');
 }

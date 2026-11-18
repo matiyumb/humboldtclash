@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { isMuted, onMuted, setMuted, unlockSfx } from './sfx';
+import { getSfxVolume, isMuted, onMuted, setMuted, setSfxVolume, sfx, unlockSfx } from './sfx';
+import { getMusicVolume, setMusicVolume } from './audio';
+import { effectiveTheme, getTheme, onTheme, setTheme, type Theme } from './theme';
+import { RANKS } from '../../shared/types';
 
 /** Forma de onda decorativa (determinista para que no "salte" entre renders). */
 export function Waveform({ bars = 48, seed = 7, active = false, className = '' }: { bars?: number; seed?: number; active?: boolean; className?: string }) {
@@ -21,20 +24,110 @@ export function Waveform({ bars = 48, seed = 7, active = false, className = '' }
   );
 }
 
-/** Logo grande (inicio): escudo del colegio + nombre del juego. */
+/** Emblema propio: vinilo verde, árbol de barras de sonido y tres estrellas. */
+export function Emblem({ size = 40, className = '' }: { size?: number; className?: string }) {
+  return <img className={`emblem ${className}`} src="/emblema.svg" alt="" width={size} height={size} />;
+}
+
 export function Logo({ small = false }: { small?: boolean }) {
   if (small) {
     return (
       <div className="logo logo--small">
-        <img className="logo__shield" src="/escudo.png" alt="" width={34} height={34} />
+        <Emblem size={34} />
         <span className="logo__text">Humboldt<b>clash</b></span>
       </div>
     );
   }
   return (
     <div className="logo">
-      <img className="logo__school" src="/logo-humboldt.png" alt="Colegio Peruano Alemán Alexander von Humboldt" width={500} height={201} />
-      <span className="logo__text logo__text--big">Humboldt<b>clash</b></span>
+      <Emblem size={84} className="logo__emblem" />
+      <div>
+        <span className="logo__text logo__text--big">Humboldt<b>clash</b></span>
+        <span className="logo__tag">★ ★ ★ &nbsp;edición del cole</span>
+      </div>
+    </div>
+  );
+}
+
+/** Insignia de rango (bronce, plata, oro, realeza). */
+export function RankBadge({ rank, compact = false }: { rank: string; compact?: boolean }) {
+  const r = RANKS.find((x) => x.id === rank) ?? RANKS[0];
+  return (
+    <span className={`rank rank--${r.tone} ${compact ? 'rank--compact' : ''}`} title={`Rango ${r.name}`}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 15.4 6.8 18.1l1-5.8L3.5 8.2l5.9-.9z" fill="currentColor" /></svg>
+      {!compact && r.name}
+    </span>
+  );
+}
+
+/** Botón de tema claro/oscuro (ciclo: auto → claro → oscuro). */
+export function ThemeToggle() {
+  const [t, setT] = useState<Theme>(getTheme());
+  useEffect(() => onTheme(setT), []);
+  const next: Record<Theme, Theme> = { auto: effectiveTheme('auto') === 'dark' ? 'light' : 'dark', light: 'dark', dark: 'light' };
+  const dark = effectiveTheme(t) === 'dark';
+  return (
+    <button className="corner-btn" onClick={() => setTheme(next[t])} aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} title={dark ? 'Modo claro' : 'Modo oscuro'}>
+      {dark ? (
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+      ) : (
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" fill="currentColor" /></svg>
+      )}
+    </button>
+  );
+}
+
+/** Panel de sonido: volumen de música y efectos, y silencio. */
+export function SoundPanel() {
+  const [open, setOpen] = useState(false);
+  const [m, setM] = useState(isMuted());
+  const [music, setMusic] = useState(getMusicVolume());
+  const [fx, setFx] = useState(getSfxVolume());
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => onMuted(setM), []);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const silent = m || (music === 0 && fx === 0);
+  return (
+    <div className="sound" ref={ref}>
+      <button className="corner-btn" onClick={() => { unlockSfx(); setOpen(!open); }} aria-expanded={open} aria-label="Ajustar volumen" title="Volumen">
+        {silent ? (
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" /><path d="M16.5 9.5l5 5M21.5 9.5l-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+        ) : (
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" /><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+        )}
+      </button>
+      {open && (
+        <div className="sound__panel" role="dialog" aria-label="Volumen">
+          <label className="slider">
+            <span>Música <b>{Math.round(music * 100)}%</b></span>
+            <input type="range" min={0} max={100} value={Math.round(music * 100)} onChange={(e) => { const v = Number(e.target.value) / 100; setMusic(v); setMusicVolume(v); }} />
+          </label>
+          <label className="slider">
+            <span>Efectos <b>{Math.round(fx * 100)}%</b></span>
+            <input type="range" min={0} max={100} value={Math.round(fx * 100)} onChange={(e) => { const v = Number(e.target.value) / 100; setFx(v); setSfxVolume(v); }} onPointerUp={() => sfx.pick()} />
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={m} onChange={(e) => setMuted(e.target.checked)} />
+            <span>Silenciar efectos</span>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function CornerControls() {
+  return (
+    <div className="corner">
+      <ThemeToggle />
+      <SoundPanel />
     </div>
   );
 }
@@ -53,27 +146,6 @@ export function Cover({ src, title, size = 56, className = '' }: { src: string |
     <span className={`cover cover--placeholder ${className}`} style={{ width: size, height: size, background: `linear-gradient(135deg, hsl(${h} 55% 52%), hsl(${(h + 40) % 360} 60% 38%))` }} aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M9 18.5a2.5 2.5 0 11-2-2.45V5l11-2v11.5a2.5 2.5 0 11-2-2.45V6.4l-7 1.27z" fill="rgba(255,255,255,.92)" /></svg>
     </span>
-  );
-}
-
-/** Botón flotante para silenciar los efectos de sonido. */
-export function MuteButton() {
-  const [m, setM] = useState(isMuted());
-  useEffect(() => onMuted(setM), []);
-  return (
-    <button
-      className="mute"
-      onClick={() => { unlockSfx(); setMuted(!m); }}
-      aria-pressed={m}
-      aria-label={m ? 'Activar efectos de sonido' : 'Silenciar efectos de sonido'}
-      title={m ? 'Efectos silenciados' : 'Efectos activados'}
-    >
-      {m ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" /><path d="M16.5 9.5l5 5M21.5 9.5l-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-      ) : (
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" /><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-      )}
-    </button>
   );
 }
 

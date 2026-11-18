@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CatalogSummary, PublicRoom } from '../../../shared/types';
 import { Icon, Logo, Waveform } from '../ui';
+import { Leaderboard, ProfileCard, useProfile } from './Profile';
 import { CatalogPicker, type Catalogs } from './CatalogPicker';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   onSolo: () => void;
   onCreateRoom: (isPublic: boolean) => void;
   onJoin: (code: string) => void;
+  onMixes: () => void;
 }
 
 function usePublicRooms() {
@@ -38,6 +40,7 @@ export function Home(p: Props) {
   const [code, setCode] = useState(p.prefillCode ?? '');
   const [isPublic, setIsPublic] = useState(false);
   const rooms = usePublicRooms();
+  const profile = useProfile();
 
   return (
     <div className="home">
@@ -95,6 +98,15 @@ export function Home(p: Props) {
         </div>
       </section>
 
+      <section className="me" aria-label="Tu perfil">
+        <ProfileCard profile={profile} />
+        <button className="mixes-cta" onClick={p.onMixes}>
+          <span className="mixes-cta__icon" aria-hidden="true">♫</span>
+          <span><b>Mis playlists</b><small>Mezcla a tus artistas favoritos</small></span>
+          <span aria-hidden="true" className="mixes-cta__arrow">→</span>
+        </button>
+      </section>
+
       <section className="public" aria-labelledby="public-title">
         <h2 id="public-title" className="h2">Salas públicas</h2>
         {rooms === null && <p className="muted">Cargando salas…</p>}
@@ -115,13 +127,19 @@ export function Home(p: Props) {
         )}
       </section>
 
+      <section className="leaderboard" aria-labelledby="ranking-title">
+        <h2 id="ranking-title" className="h2">Ranking global</h2>
+        <p className="muted">Por victorias. Rookie 50 · Conocedor 100 · Fan 500 · Melófano 5000.</p>
+        <Leaderboard />
+      </section>
+
       <section className="catalogs" aria-labelledby="catalogs-title">
         <h2 id="catalogs-title" className="h2">Artistas y colecciones</h2>
         <CatalogPicker catalogs={p.catalogs} error={p.catalogError} onRetry={p.onRetryCatalogs} onSelect={p.onPickCatalog} />
       </section>
       <footer className="foot">
         Vistas previas de 30 s proporcionadas por <a href="https://www.deezer.com" target="_blank" rel="noreferrer">Deezer</a>.
-        Catálogo de demostración original (CC0). Más info en GUIA-CANCIONES.md.
+        Hecho por y para el cole ★★★
       </footer>
     </div>
   );

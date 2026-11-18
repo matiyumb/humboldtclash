@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CatalogSummary } from '../../../shared/types';
 import { CatalogCard } from './CatalogCard';
+import { mixToSummary, useMyMixes } from './Mixes';
 
 export interface Catalogs {
   featured: CatalogSummary[];
@@ -52,6 +53,8 @@ export function CatalogPicker(p: Props) {
   const filter = (list: CatalogSummary[]) => (q ? list.filter((c) => norm(c.name).includes(q) || c.artists.some((a) => norm(a).includes(q))) : list);
   const featured = useMemo(() => filter(p.catalogs?.featured ?? []), [p.catalogs, q]);
   const local = useMemo(() => filter(p.catalogs?.local ?? []), [p.catalogs, q]);
+  const myMixesRaw = useMyMixes();
+  const mine = useMemo(() => filter((myMixesRaw ?? []).map(mixToSummary)), [myMixesRaw, q]);
   const remoteOnly = (remote ?? []).filter((r) => !featured.some((f) => f.id === r.id));
 
   const grid = (list: CatalogSummary[]) => (
@@ -87,6 +90,13 @@ export function CatalogPicker(p: Props) {
         </section>
       )}
 
+      {mine.length > 0 && (
+        <section className="picker__section">
+          <h3 className="picker__title"><span className="mix-badge">Tuyas</span> Mis playlists</h3>
+          {grid(mine)}
+        </section>
+      )}
+
       {featured.length > 0 && (
         <section className="picker__section">
           <h3 className="picker__title"><span className="dz-badge">Deezer</span> Destacados</h3>
@@ -99,7 +109,7 @@ export function CatalogPicker(p: Props) {
 
       {local.length > 0 && (
         <section className="picker__section">
-          <h3 className="picker__title">Catálogo de demostración</h3>
+          <h3 className="picker__title">Canciones propias</h3>
           {grid(local)}
         </section>
       )}

@@ -3,8 +3,10 @@ import type { CatalogSummary, RoomState } from '../../../shared/types';
 import { call } from '../net';
 import { isUnlocked, unlockAudio } from '../audio';
 import { sfx } from '../sfx';
-import { Banner, Icon, Waveform } from '../ui';
+import { Banner, Icon, RankBadge, Waveform } from '../ui';
 import { CatalogPicker, type Catalogs } from './CatalogPicker';
+import { SettingsForm } from './SettingsForm';
+import type { GameSettings } from '../../../shared/types';
 
 export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: Catalogs | null; onLeave: () => void }) {
   const isHost = room.hostId === room.you;
@@ -53,6 +55,11 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
     else setError(`${c.name}: ${r.error}`);
   };
 
+  const changeSettings = async (s: GameSettings) => {
+    const r = await call('room:setSettings', { settings: s });
+    if (!r.ok) setError(r.error);
+  };
+
   const togglePublic = async () => {
     const r = await call('room:setPublic', { isPublic: !room.isPublic });
     if (!r.ok) setError(r.error);
@@ -87,6 +94,7 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
             {active.map((p) => (
               <li key={p.id} className={`player ${p.connected ? '' : 'is-off'}`}>
                 <span className="player__avatar" aria-hidden="true">{p.nickname.slice(0, 1).toUpperCase()}</span>
+                <RankBadge rank={p.rank} compact />
                 <span className="player__name">
                   {p.nickname}
                   {p.id === room.you && <span className="tag">tú</span>}
@@ -128,6 +136,11 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
             </button>
           )}
         </div>
+      </div>
+
+      <div className="panel">
+        <h2 className="h3">Ajustes de la partida{!isHost && <span className="muted"> · los elige el anfitrión</span>}</h2>
+        <SettingsForm value={room.settings} onChange={isHost ? changeSettings : undefined} showShuffle={!!room.catalog && /^(mix|deezer:playlist)/.test(room.catalog.id)} />
       </div>
 
       {error && <Banner>{error}</Banner>}

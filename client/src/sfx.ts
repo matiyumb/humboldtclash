@@ -4,6 +4,7 @@
 type Ctx = AudioContext;
 let ctx: Ctx | null = null;
 let master: GainNode | null = null;
+let sfxVolume = (() => { try { const v = localStorage.getItem('hc.vol.sfx'); return v === null ? 0.9 : Math.min(1, Math.max(0, Number(v))); } catch { return 0.9; } })();
 let muted = (() => { try { return localStorage.getItem('hc.muted') === '1'; } catch { return false; } })();
 const listeners = new Set<(m: boolean) => void>();
 
@@ -14,7 +15,7 @@ function ensure(): Ctx | null {
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : 0.9;
+    master.gain.value = muted ? 0 : sfxVolume;
     master.connect(ctx.destination);
   }
   return ctx;
@@ -30,8 +31,14 @@ export const isMuted = () => muted;
 export function setMuted(m: boolean) {
   muted = m;
   try { localStorage.setItem('hc.muted', m ? '1' : '0'); } catch { /* sin almacenamiento */ }
-  if (master && ctx) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.02);
+  if (master && ctx) master.gain.setTargetAtTime(m ? 0 : sfxVolume, ctx.currentTime, 0.02);
   listeners.forEach((l) => l(m));
+}
+export const getSfxVolume = () => sfxVolume;
+export function setSfxVolume(v: number) {
+  sfxVolume = Math.min(1, Math.max(0, v));
+  try { localStorage.setItem('hc.vol.sfx', String(sfxVolume)); } catch { /* sin almacenamiento */ }
+  if (master && ctx && !muted) master.gain.setTargetAtTime(sfxVolume, ctx.currentTime, 0.02);
 }
 export const onMuted = (fn: (m: boolean) => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
@@ -95,6 +102,14 @@ export const sfx = {
     { f: 783.99, t: 0.28, d: 0.16, type: 'triangle', g: 0.14 },
     { f: 1046.5, t: 0.42, d: 0.6, type: 'triangle', g: 0.16 },
     { f: 1318.5, t: 0.42, d: 0.6, type: 'sine', g: 0.08 },
+  ]),
+  /** Easter egg «oído biónico». */
+  lightning: () => play([
+    { f: 1800, d: 0.12, type: 'sawtooth', g: 0.05, slide: 300 },
+    { f: 1046.5, t: 0.1, d: 0.18, type: 'triangle', g: 0.16 },
+    { f: 1318.5, t: 0.18, d: 0.18, type: 'triangle', g: 0.16 },
+    { f: 1568, t: 0.26, d: 0.22, type: 'triangle', g: 0.16 },
+    { f: 2093, t: 0.34, d: 0.5, type: 'sine', g: 0.12 },
   ]),
   join: () => play([{ f: 988, d: 0.08, g: 0.08 }, { f: 1319, t: 0.07, d: 0.12, g: 0.07 }]),
 };

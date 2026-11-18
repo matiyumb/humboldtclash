@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CatalogSummary, RoomState } from '../../shared/types';
+import type { CatalogSummary, GameSettings, RoomState } from '../../shared/types';
 import type { Catalogs } from './screens/CatalogPicker';
 import { call, identity, noteServerTime, socket, store } from './net';
 import { forgetClip, unlockAudio } from './audio';
@@ -9,9 +9,10 @@ import { Lobby } from './screens/Lobby';
 import { Game } from './screens/Game';
 import { Results } from './screens/Results';
 import { Intro } from './screens/Intro';
-import { Banner, Logo, MuteButton } from './ui';
+import { Mixes } from './screens/Mixes';
+import { Banner, CornerControls, Logo } from './ui';
 
-type View = { name: 'home' } | { name: 'setup'; initial: CatalogSummary | null } | { name: 'room' };
+type View = { name: 'home' } | { name: 'setup'; initial: CatalogSummary | null } | { name: 'room' } | { name: 'mixes' };
 
 const codeFromPath = () => {
   const m = location.pathname.match(/^\/sala\/([A-Za-z0-9]{6})\/?$/);
@@ -106,20 +107,20 @@ export function App() {
     return false;
   };
 
-  const startSolo = async (catalogId: string) => {
+  const startSolo = async (catalogId: string, settings: GameSettings) => {
     if (!requireNick()) return;
     unlockAudio();
     setBusy(true);
-    const r = await call<{ code: string }>('solo:start', { identity: identity(), nickname, catalogId }, 15000);
+    const r = await call<{ code: string }>('solo:start', { identity: identity(), nickname, catalogId, settings }, 15000);
     setBusy(false);
     if (r.ok) { setNotice(null); enterRoom(r.code, 'solo'); } else setNotice({ kind: 'error', text: r.error });
   };
 
-  const createRoom = async (catalogId?: string | null, isPublic = false) => {
+  const createRoom = async (catalogId?: string | null, isPublic = false, settings?: GameSettings) => {
     if (!requireNick()) return;
     unlockAudio();
     setBusy(true);
-    const r = await call<{ code: string }>('room:create', { identity: identity(), nickname, catalogId: catalogId ?? null, isPublic }, 15000);
+    const r = await call<{ code: string }>('room:create', { identity: identity(), nickname, catalogId: catalogId ?? null, isPublic, settings }, 15000);
     setBusy(false);
     if (r.ok) { setNotice(null); enterRoom(r.code, 'multi'); } else setNotice({ kind: 'error', text: r.error });
   };
@@ -163,6 +164,8 @@ export function App() {
     else if (room.phase === 'lobby') body = <Lobby room={room} catalogs={catalogs} onLeave={leave} />;
     else if (room.phase === 'playing') body = room.round ? <Game room={room} onLeave={leave} /> : <Intro room={room} />;
     else body = <Results room={room} onHome={leave} />;
+  } else if (view.name === 'mixes') {
+    body = <Mixes nickname={nickname} onBack={() => setView({ name: 'home' })} onPlay={(c) => setView({ name: 'setup', initial: c })} />;
   } else if (view.name === 'setup') {
     body = (
       <Setup
@@ -173,7 +176,7 @@ export function App() {
         busy={busy}
         onBack={() => setView({ name: 'home' })}
         onSolo={startSolo}
-        onCreateRoom={createRoom}
+        onCreateRoom={(id, s) => createRoom(id, false, s)}
       />
     );
   } else {
@@ -189,6 +192,7 @@ export function App() {
         onPickCatalog={(c) => { setNotice(null); setView({ name: 'setup', initial: c }); }}
         onSolo={() => { setNotice(null); setView({ name: 'setup', initial: null }); }}
         onCreateRoom={(isPublic) => createRoom(null, isPublic)}
+        onMixes={() => { setNotice(null); setView({ name: 'mixes' }); }}
         onJoin={joinRoom}
       />
     );
@@ -198,7 +202,7 @@ export function App() {
   const screenKey = replaced ? 'replaced' : view.name === 'room' ? `room-${room?.phase ?? 'wait'}-${room?.round ? 'g' : 'i'}` : view.name;
   return (
     <div className="app">
-      <MuteButton />
+      <CornerControls />
       {!inGame && view.name !== 'home' && (
         <header className="topbar">
           <Logo small />
