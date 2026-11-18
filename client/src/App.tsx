@@ -33,6 +33,8 @@ export function App() {
   const [prefillCode] = useState(codeFromPath());
   const [homeTab, setHomeTabState] = useState<HomeTab>(() => { try { return localStorage.getItem('hc.tab') === 'ranked' ? 'ranked' : 'casual'; } catch { return 'casual'; } });
   const [autoSearch, setAutoSearch] = useState(false);
+  /** Cambia al pulsar el logo en el inicio: vuelve a montar la pantalla (como recargarla). */
+  const [homeKey, setHomeKey] = useState(0);
   const setHomeTab = (t: HomeTab) => { setHomeTabState(t); setAutoSearch(false); try { localStorage.setItem('hc.tab', t); } catch { /* sin almacenamiento */ } };
   const roomCode = useRef<string | null>(null);
 
@@ -140,7 +142,10 @@ export function App() {
     if (r.ok) { setNotice(null); enterRoom(r.code, 'multi'); } else setNotice({ kind: 'error', text: r.error });
   };
 
-  /** El logo lleva al inicio (si estás en una sala, sales de ella; en partida, pregunta antes). */
+  /**
+   * El logo lleva al inicio (si estás en una sala, sales de ella; en partida, pregunta antes).
+   * Si ya estás en el inicio, lo vuelve a cargar: arriba del todo, sin avisos y con el catálogo al día.
+   */
   const goHome = async () => {
     if (view.name === 'room') {
       if (room?.phase === 'playing' && !confirm('¿Abandonar la partida?')) return;
@@ -148,7 +153,12 @@ export function App() {
       return;
     }
     setNotice(null);
+    if (view.name === 'home') {
+      setHomeKey((k) => k + 1);
+      void loadCatalogs();
+    }
     setView({ name: 'home' });
+    window.scrollTo({ top: 0 });
   };
 
   const leave = async () => {
@@ -213,12 +223,13 @@ export function App() {
         onCreateRoom={(isPublic) => createRoom(null, isPublic)}
         onMixes={() => { setNotice(null); setView({ name: 'mixes' }); }}
         onJoin={joinRoom}
+        onLogo={goHome}
       />
     );
   }
 
   const inGame = view.name === 'room' && room?.phase === 'playing';
-  const screenKey = replaced ? 'replaced' : view.name === 'room' ? `room-${room?.phase ?? 'wait'}-${room?.round ? 'g' : 'i'}` : view.name;
+  const screenKey = replaced ? 'replaced' : view.name === 'room' ? `room-${room?.phase ?? 'wait'}-${room?.round ? 'g' : 'i'}` : view.name === 'home' ? `home-${homeKey}` : view.name;
   return (
     <div className="app">
       <CornerControls />

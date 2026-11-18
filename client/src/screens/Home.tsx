@@ -26,6 +26,8 @@ interface Props {
   onJoin: (code: string) => void;
   onMixes: () => void;
   onRankedFound: (code: string) => void;
+  /** Pulsar el logo: vuelve a cargar el inicio. */
+  onLogo: () => void;
 }
 
 function usePublicRooms(active: boolean) {
@@ -56,7 +58,7 @@ export function Home(p: Props) {
   return (
     <div className="home">
       <header className="home__head">
-        <Logo />
+        <button type="button" className="logo-btn logo-btn--big" onClick={p.onLogo} aria-label="Ir al inicio"><Logo /></button>
         <div className="home__headtext">
           <p className="hero__tag">Escucha un fragmento. Elige el título. Gana el oído más rápido.</p>
           <Waveform className="hero__wave" bars={48} seed={11} />
