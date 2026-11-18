@@ -68,7 +68,7 @@ export function Home(p: Props) {
           <span aria-hidden="true">🎵</span> Casual <small>práctica y salas con amigos</small>
         </button>
         <button role="tab" aria-selected={p.tab === 'ranked'} className={p.tab === 'ranked' ? 'is-on' : ''} onClick={() => p.setTab('ranked')}>
-          <span aria-hidden="true">⚔️</span> Competitivo <small>1v1 con MMR</small>
+          <span aria-hidden="true">⚔️</span> Competitivo <small>duelos 1v1 por rangos</small>
         </button>
       </div>
 
