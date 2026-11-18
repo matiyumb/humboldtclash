@@ -295,6 +295,13 @@ log('\n▶ Playlist propia, 5 rondas Nicho en modo 1 segundo, perfil, ranking, t
   await page.click('.logo-btn');
   await page.waitForSelector('.mode-tabs');
   check(true, 'pulsar el logo vuelve al inicio');
+  // En el inicio, el logo grande también es un botón: vuelve a cargar el inicio (arriba y catálogo al día).
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const recarga = page.waitForResponse((res) => res.url().endsWith('/api/catalogs'), { timeout: 5000 });
+  await page.click('.home__head .logo-btn');
+  await recarga;
+  await page.waitForSelector('.mode-tabs');
+  check((await page.evaluate(() => window.scrollY)) === 0, 'en el inicio, el logo vuelve a cargar el inicio y sube arriba');
   await ctx.close();
 }
 
