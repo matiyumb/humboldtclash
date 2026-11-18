@@ -476,8 +476,8 @@ log('\n▶ Competitivo 1v1: cuentas, emparejamiento y MMR');
     await pg.waitForSelector('.ranked form.account');
     await pg.fill('.ranked .account input[autocomplete="username"]', name);
     await pg.fill('.ranked .account input[type=password]', 'clave-segura-1');
-    await pg.click('.ranked .account button:has-text("Crear cuenta")');
-    await pg.waitForSelector('.ranked__mmr');
+    await pg.click('.ranked .account button[type=submit]');
+    await pg.waitForSelector('.ranked__record');
   }
   check(true, 'dos jugadores crean su cuenta desde la pestaña Competitivo');
   await a.click('button:has-text("Buscar rival")');
@@ -496,16 +496,19 @@ log('\n▶ Competitivo 1v1: cuentas, emparejamiento y MMR');
     await b.click(`.answer:has-text("${titles.find((t) => t !== sol.title)}")`);
     await a.waitForSelector('.verdict', { timeout: 13000 });
   }
-  await a.waitForSelector('.mmr-change', { timeout: 15000 });
-  await b.waitForSelector('.mmr-change', { timeout: 15000 });
-  await a.waitForTimeout(1600);
-  check(/Ganaste el duelo/.test(await a.textContent('.results h1')), 'Ana gana el duelo');
-  const up = await a.textContent('.mmr-change'), down = await b.textContent('.mmr-change');
-  check(/▲ \+\d+/.test(up) && /▼ -\d+/.test(down), `MMR: Ana ${up.replace(/\s+/g, ' ')} · Beto ${down.replace(/\s+/g, ' ')}`);
+  await a.waitForSelector('.results h1', { timeout: 15000 });
+  await b.waitForSelector('.results h1', { timeout: 15000 });
+  check(/Ganaste el duelo/.test(await a.textContent('.results h1')) && /Derrota/.test(await b.textContent('.results h1')), 'Ana gana el duelo y Beto pierde');
+  check(!/MMR/.test(await a.textContent('.results')), 'el MMR no se muestra en los resultados');
+  await a.waitForTimeout(800);
+  const pid = await a.evaluate(() => JSON.parse(localStorage.getItem('hc.identity')).playerId);
+  const perfil = await (await fetch(`${BASE}/api/perfil/${pid}`)).json();
+  check(perfil.rankedWins === 1 && !('mmr' in perfil) && !('rd' in perfil), 'la API del perfil no expone el MMR (secreto)');
   await a.screenshot({ path: `${SHOTS}/19-duelo-ganado.png` });
   await a.click('text=Volver al inicio');
   await a.waitForSelector(`.ranked .leaders li:has-text("Ana${run}")`, { timeout: 8000 });
-  check(true, 'aparece en el ranking competitivo');
+  check(/1\s*V/.test(await a.textContent('.ranked__record')), 'récord competitivo 1 V');
+  check(true, 'aparece en el ranking competitivo (por victorias, sin MMR)');
   await ctxA.close(); await ctxB.close();
 }
 

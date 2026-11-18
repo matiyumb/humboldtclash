@@ -63,14 +63,7 @@ export function Results({ room, onHome, onRanked }: { room: RoomState; onHome: (
         <>
           <p className="eyebrow">{room.mode === 'ranked' ? 'Competitivo 1v1' : `Sala ${room.code}`} · {room.catalog?.name}</p>
           <h1 className="h1">{room.mode === 'ranked' ? (r.youWon ? '¡Ganaste el duelo!' : mine?.position === 1 ? 'Empate' : 'Derrota') : 'Clasificación final'}</h1>
-          {r.rating && (
-            <div className={`mmr-change ${r.rating.delta >= 0 ? 'is-up' : 'is-down'}`}>
-              <span className="mmr-change__label">MMR</span>
-              <span className="mmr-change__value"><CountUp value={r.rating.after} from={r.rating.before} ms={1400} /></span>
-              <span className="mmr-change__delta">{r.rating.delta >= 0 ? '▲ +' : '▼ '}{r.rating.delta}</span>
-            </div>
-          )}
-          {room.mode === 'ranked' && !r.rating && <p className="muted">Calculando MMR…</p>}
+          {room.mode === 'ranked' && <p className="muted">{r.youWon ? '+1 victoria competitiva.' : 'Sigue practicando: la próxima es tuya.'}</p>}
           <div className="panel table-wrap">
             <table className="table">
               <thead>

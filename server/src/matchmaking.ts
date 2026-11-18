@@ -54,7 +54,7 @@ export class Matchmaker {
     const e = this.queue.get(playerId);
     if (!e) return;
     this.queue.delete(playerId);
-    this.notify(e.socketId, { searching: false, since: e.since, window: 0, queued: this.queue.size });
+    this.notify(e.socketId, { searching: false, since: e.since, queued: this.queue.size });
   }
   leaveSocket(socketId: string) {
     for (const e of this.queue.values()) if (e.socketId === socketId) this.queue.delete(e.playerId);
@@ -82,7 +82,7 @@ export class Matchmaker {
       }
     }
     for (const e of this.queue.values()) {
-      this.notify(e.socketId, { searching: true, since: e.since, window: mmrWindow(now - e.since), queued: this.queue.size });
+      this.notify(e.socketId, { searching: true, since: e.since, queued: this.queue.size }); // sin MMR: es secreto
     }
   }
 }

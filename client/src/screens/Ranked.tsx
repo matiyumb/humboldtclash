@@ -39,7 +39,7 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
     setError(null);
     const r = await call('ranked:queue', { identity: identity() });
     if (!r.ok) setError(r.error);
-    else setStatus({ searching: true, since: Date.now(), window: 100, queued: 1 });
+    else setStatus({ searching: true, since: Date.now(), queued: 1 });
   };
   const cancel = async () => { await call('ranked:cancel', { identity: identity() }); setStatus(null); };
 
@@ -50,7 +50,7 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
       <div className="ranked">
         <div className="ranked__hero">
           <h2 className="h2">⚔️ Competitivo 1v1</h2>
-          <p className="muted">Duelos contra jugadores registrados de tu rango. Ganas o pierdes MMR según el rival.</p>
+          <p className="muted">Duelos contra jugadores registrados de tu rango y nivel parecido.</p>
         </div>
         <AccountPanel intro={<p className="account__intro">Para jugar en competitivo necesitas una cuenta (así nadie juega con perfiles desechables).</p>} />
       </div>
@@ -64,20 +64,21 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
         <div className="ranked__top">
           <div>
             <p className="eyebrow">Competitivo 1v1</p>
-            <div className="ranked__mmr"><b>{profile?.mmr ?? 1500}</b><span>MMR</span></div>
-            {profile && <p className="muted">{profile.rankedWins} victorias · {profile.rankedGames - profile.rankedWins} derrotas{profile.rd > 200 ? ' · calibrando' : ''}</p>}
+            <div className="ranked__record"><b>{profile?.rankedWins ?? 0}</b><span>V</span><b>{(profile?.rankedGames ?? 0) - (profile?.rankedWins ?? 0)}</b><span>D</span></div>
+            {profile && profile.rankedGames < 5 && <p className="muted">Partidas de calibración: {profile.rankedGames}/5</p>}
           </div>
           {profile && <RankBadge rank={profile.rank.id} />}
         </div>
         <ul className="ranked__rules">
           <li>10 canciones de los éxitos del momento, fragmento completo.</li>
-          <li>Rival de tu mismo rango y MMR parecido (se amplía si tardas en encontrar).</li>
+          <li>Rival de tu mismo rango y nivel parecido (se amplía si tardas en encontrar).</li>
+          <li>Tu nivel competitivo es secreto: solo sirve para emparejarte con justicia.</li>
           <li>Abandonar cuenta como derrota.</li>
         </ul>
         {status ? (
           <div className="searching" role="status" aria-live="polite">
             <Waveform bars={36} seed={waited % 7} active className="searching__wave" />
-            <p><b>Buscando rival…</b> {waited} s · margen ±{status.window} MMR · {status.queued} en cola</p>
+            <p><b>Buscando rival de tu nivel…</b> {waited} s · {status.queued} en cola{waited >= 20 ? ' · ampliando la búsqueda' : ''}</p>
             <button className="btn btn--ghost" onClick={cancel}>Cancelar</button>
           </div>
         ) : (
@@ -87,7 +88,7 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
       </div>
       <div className="panel">
         <h3 className="h3">Ranking competitivo</h3>
-        <Leaderboard by="mmr" />
+        <Leaderboard by="competitivo" />
       </div>
     </div>
   );

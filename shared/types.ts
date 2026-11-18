@@ -90,8 +90,9 @@ export function rankFor(wins: number): { current: RankDef; next: RankDef | null 
 export const RANKED_SETTINGS = { rounds: 10, difficulty: 'general' as Difficulty, clipSeconds: FULL_CLIP, instrumental: false, shuffle: true };
 export const RANKED_CATALOG = 'deezer:chart';
 export const DEFAULT_RATING = 1500;
+/** Cambio de MMR: solo en el servidor. El MMR es secreto: sirve para emparejar, nunca se muestra. */
 export interface RatingChange { before: number; after: number; delta: number }
-export interface QueueStatus { searching: boolean; since: number; window: number; queued: number }
+export interface QueueStatus { searching: boolean; since: number; queued: number }
 export interface AccountView { username: string; playerId: string }
 
 export interface Profile {
@@ -109,7 +110,9 @@ export interface Profile {
   rankedGames: number;
   rankedWins: number;
 }
-export interface LeaderRow { position: number; playerId: string; nickname: string; points: number; wins: number; games: number; mmr: number; rankedGames: number }
+export interface LeaderRow { position: number; playerId: string; nickname: string; points: number; wins: number; games: number; rankedWins: number; rankedGames: number }
+/** Perfil tal como lo ve el cliente: sin MMR ni datos internos de Glicko. */
+export type PublicProfile = Omit<Profile, 'mmr' | 'rd' | 'vol'>;
 
 // ---------- Playlists de usuarios (mezclas) ----------
 export interface MixTrack {
@@ -228,7 +231,6 @@ export interface ResultsView {
   missed: MissedSong[]; // de quien recibe la vista
   totalRounds: number;
   youWon: boolean; // cuenta como victoria para tu rango
-  rating: RatingChange | null; // cambio de MMR (solo competitivo)
 }
 
 export interface RoomState {

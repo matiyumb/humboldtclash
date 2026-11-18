@@ -19,7 +19,7 @@ export interface Store {
   profiles(ids: string[]): Promise<Map<string, Profile>>;
   recordGame(outcomes: GameOutcome[]): Promise<void>;
   recordRanked(outcomes: RankedOutcome[]): Promise<void>;
-  leaderboard(limit: number, by?: 'wins' | 'mmr'): Promise<LeaderRow[]>;
+  leaderboard(limit: number, by?: 'wins' | 'ranked'): Promise<LeaderRow[]>;
   createAccount(a: Account): Promise<boolean>; // false si el usuario ya existe
   account(usernameKey: string): Promise<Account | null>;
   accountOf(playerId: string): Promise<Account | null>;
@@ -53,16 +53,17 @@ function applyOutcome(p: Profile, o: GameOutcome): Profile {
   };
 }
 
-function rankRows(rows: Profile[], limit: number, by: 'wins' | 'mmr'): LeaderRow[] {
-  const pool = by === 'mmr' ? rows.filter((p) => p.rankedGames > 0) : rows.filter((p) => p.games > 0);
-  const sorted = [...pool].sort(by === 'mmr' ? (a, b) => b.mmr - a.mmr || b.rankedWins - a.rankedWins : (a, b) => b.wins - a.wins || b.points - a.points).slice(0, limit);
+function rankRows(rows: Profile[], limit: number, by: 'wins' | 'ranked'): LeaderRow[] {
+  // El ranking competitivo se ordena por victorias en duelos (el MMR es secreto).
+  const pool = by === 'ranked' ? rows.filter((p) => p.rankedGames > 0) : rows.filter((p) => p.games > 0);
+  const sorted = [...pool].sort(by === 'ranked' ? (a, b) => b.rankedWins - a.rankedWins || a.rankedGames - b.rankedGames : (a, b) => b.wins - a.wins || b.points - a.points).slice(0, limit);
   let lastKey = '';
   let lastPos = 0;
   return sorted.map((p, i) => {
-    const key = by === 'mmr' ? `${p.mmr}` : `${p.wins}:${p.points}`;
+    const key = by === 'ranked' ? `${p.rankedWins}:${p.rankedGames}` : `${p.wins}:${p.points}`;
     const position = key === lastKey ? lastPos : i + 1;
     lastKey = key; lastPos = position;
-    return { position, playerId: p.playerId, nickname: p.nickname, points: p.points, wins: p.wins, games: p.games, mmr: p.mmr, rankedGames: p.rankedGames };
+    return { position, playerId: p.playerId, nickname: p.nickname, points: p.points, wins: p.wins, games: p.games, rankedWins: p.rankedWins, rankedGames: p.rankedGames };
   });
 }
 
@@ -122,7 +123,7 @@ export class JsonStore implements Store {
     }
     this.persist();
   }
-  async leaderboard(limit: number, by: 'wins' | 'mmr' = 'wins') { return rankRows([...this.profilesMap.values()], limit, by); }
+  async leaderboard(limit: number, by: 'wins' | 'ranked' = 'wins') { return rankRows([...this.profilesMap.values()], limit, by); }
   async createAccount(a: Account) {
     if (this.accounts.has(a.usernameKey)) return false;
     this.accounts.set(a.usernameKey, a);
@@ -268,9 +269,9 @@ export class PgStore implements Store {
       );
     }
   }
-  async leaderboard(limit: number, by: 'wins' | 'mmr' = 'wins') {
-    const r = by === 'mmr'
-      ? await this.db.query('SELECT * FROM hc_profiles WHERE ranked_games > 0 ORDER BY mmr DESC, ranked_wins DESC LIMIT $1', [limit])
+  async leaderboard(limit: number, by: 'wins' | 'ranked' = 'wins') {
+    const r = by === 'ranked'
+      ? await this.db.query('SELECT * FROM hc_profiles WHERE ranked_games > 0 ORDER BY ranked_wins DESC, ranked_games ASC LIMIT $1', [limit])
       : await this.db.query('SELECT * FROM hc_profiles WHERE games > 0 ORDER BY wins DESC, points DESC LIMIT $1', [limit]);
     return rankRows(r.rows.map(PgStore.row), limit, by);
   }

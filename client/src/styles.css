@@ -641,3 +641,8 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
   .chip-opt:hover:not(:disabled):not(.is-on) { border-color: var(--green-300); }
   .mode-tabs button:not(.is-on):hover { color: var(--text); }
 }
+.ranked__record { display: flex; align-items: baseline; gap: 6px; }
+.ranked__record b { font-size: 44px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ranked__record b:first-of-type { color: var(--ok); }
+.ranked__record b:last-of-type { color: var(--bad); }
+.ranked__record span { color: var(--muted); font-weight: 800; margin-right: 10px; }

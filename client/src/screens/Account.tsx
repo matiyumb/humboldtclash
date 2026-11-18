@@ -61,7 +61,7 @@ export function AccountPanel({ compact = false, intro }: { compact?: boolean; in
       </label>
       {mode === 'register' && <p className="hint">Tus puntos, rango y playlists de este navegador pasan a tu cuenta. Entra desde cualquier dispositivo.</p>}
       {error && <Banner>{error}</Banner>}
-      <button className="btn btn--primary btn--block" disabled={busy}>{mode === 'register' ? 'Crear cuenta' : 'Entrar'}</button>
+      <button type="submit" className="btn btn--primary btn--block" disabled={busy}>{mode === 'register' ? 'Crear cuenta' : 'Entrar'}</button>
     </form>
   );
 }

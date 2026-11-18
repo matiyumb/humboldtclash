@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { LeaderRow, Profile, RankDef } from '../../../shared/types';
+import type { LeaderRow, PublicProfile, RankDef } from '../../../shared/types';
 import { identity } from '../net';
 import { CountUp, RankBadge } from '../ui';
 
-export interface ProfileResp extends Profile { rank: RankDef; nextRank: RankDef | null; persistent: boolean; username: string | null }
+export interface ProfileResp extends PublicProfile { rank: RankDef; nextRank: RankDef | null; persistent: boolean; username: string | null }
 
 export function useProfile(refresh = 0) {
   const [p, setP] = useState<ProfileResp | null>(null);
@@ -44,14 +44,14 @@ export function ProfileCard({ profile, highlight = false }: { profile: ProfileRe
   );
 }
 
-export function Leaderboard({ by = 'wins', limit }: { by?: 'wins' | 'mmr'; limit?: number }) {
+export function Leaderboard({ by = 'wins', limit }: { by?: 'wins' | 'competitivo'; limit?: number }) {
   const [rows, setRows] = useState<(LeaderRow & { rank: string })[] | null>(null);
   useEffect(() => {
     fetch(`/api/ranking?por=${by}`, { cache: 'no-store' }).then((r) => r.json()).then((d) => setRows(limit ? d.slice(0, limit) : d)).catch(() => setRows([]));
   }, [by, limit]);
   const me = identity().playerId;
   if (!rows) return <p className="muted">Cargando ranking…</p>;
-  if (!rows.length) return <p className="muted">{by === 'mmr' ? 'Aún no hay duelos competitivos.' : 'Aún nadie ha ganado en multijugador. ¡Sé el primero!'}</p>;
+  if (!rows.length) return <p className="muted">{by === 'competitivo' ? 'Aún no hay duelos competitivos.' : 'Aún nadie ha ganado en multijugador. ¡Sé el primero!'}</p>;
   return (
     <ol className="leaders">
       {rows.map((r, i) => (
@@ -59,8 +59,8 @@ export function Leaderboard({ by = 'wins', limit }: { by?: 'wins' | 'mmr'; limit
           <span className={`pos pos--${r.position}`}>{r.position}º</span>
           <RankBadge rank={r.rank} compact />
           <span className="leaders__name">{r.nickname}</span>
-          {by === 'mmr' ? (
-            <><span className="leaders__wins"><b>{r.mmr}</b> MMR</span><span className="leaders__pts">{r.rankedGames} duelos</span></>
+          {by === 'competitivo' ? (
+            <><span className="leaders__wins"><b>{r.rankedWins}</b> vict.</span><span className="leaders__pts">{r.rankedGames} duelos</span></>
           ) : (
             <><span className="leaders__wins"><b>{r.wins}</b> vict.</span><span className="leaders__pts">{r.points.toLocaleString('es')} pts</span></>
           )}

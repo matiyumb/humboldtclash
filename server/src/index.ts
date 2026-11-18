@@ -10,7 +10,7 @@ import { AudioProxy } from './audioProxy.js';
 import { Deezer, DeezerError } from './deezer.js';
 import { Library } from './library.js';
 import { GameManager, cleanNickname } from './game.js';
-import { createStore } from './store.js';
+import { createStore, emptyProfile } from './store.js';
 import { login, register } from './accounts.js';
 import { parseSongLines } from './importer.js';
 import { Matchmaker, type QueueEntry } from './matchmaking.js';
@@ -97,15 +97,17 @@ const validId = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0
 app.get('/api/perfil/:playerId', async (req, res) => {
   if (!validId(req.params.playerId)) return res.status(400).json({ error: 'Id no válido' });
   res.setHeader('Cache-Control', 'no-store');
-  const p = (await store.profile(req.params.playerId)) ?? { playerId: req.params.playerId, nickname: '', points: 0, games: 0, wins: 0, correct: 0, best: 0 };
+  const p = (await store.profile(req.params.playerId)) ?? emptyProfile(req.params.playerId, '');
   const { current, next } = rankFor(p.wins);
   const acc = await store.accountOf(req.params.playerId);
-  res.json({ ...p, rank: current, nextRank: next, persistent: store.kind === 'postgres', username: acc?.username ?? null });
+  // El MMR (y los datos de Glicko) son secretos: solo sirven para emparejar.
+  const { mmr: _m, rd: _r, vol: _v, ...pub } = p;
+  res.json({ ...pub, rank: current, nextRank: next, persistent: store.kind === 'postgres', username: acc?.username ?? null });
 });
 
 app.get('/api/ranking', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  const rows = await store.leaderboard(20, req.query.por === 'mmr' ? 'mmr' : 'wins');
+  const rows = await store.leaderboard(20, req.query.por === 'competitivo' ? 'ranked' : 'wins');
   res.json(rows.map((r) => ({ ...r, rank: rankFor(r.wins).current.id })));
 });
 

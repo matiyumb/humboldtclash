@@ -80,7 +80,9 @@ Las tablas se crean solas al arrancar. En `/api/health`, el campo `store` dice `
 - **Competitivo:** solo para cuentas registradas. Son duelos 1v1 de 10 canciones de «Éxitos del momento».
   - El emparejamiento busca tu **mismo rango** y un **MMR parecido** (±100).
   - El margen crece con la espera (+15 por segundo). A los 20 s acepta rangos vecinos y a los 45 s cualquiera.
-- **MMR:** usa **Glicko-2**. Ganar a alguien mejor da más MMR, y los jugadores nuevos se mueven más rápido hasta «calibrarse». Abandonar cuenta como derrota.
+- **MMR secreto:** usa **Glicko-2** y **nunca se muestra** (ni en la web ni en la API). Solo sirve para emparejar con justicia.
+  - Ganar a alguien mejor sube más tu nivel, y los jugadores nuevos se mueven más rápido durante las primeras partidas (calibración).
+  - Lo que sí ves es tu récord competitivo (victorias y derrotas) y tu rango. Abandonar cuenta como derrota.
 - **Rangos:** Rookie, Conocedor, Fan y Melófano. **Solo cuentan las victorias multijugador** (salas y competitivo); el modo solo es práctica.
 
 ## Publicidad (para el futuro)

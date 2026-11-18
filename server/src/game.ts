@@ -239,6 +239,10 @@ export class GameManager {
   roomCount() {
     return this.rooms.size;
   }
+  /** Solo para pruebas (y registros): cambio de MMR de un jugador en una sala competitiva. */
+  _debugRating(code: string, playerId: string) {
+    return this.rooms.get(code)?.ratingChanges.get(playerId) ?? null;
+  }
   /** Solo para pruebas: opción correcta de la ronda actual. */
   _debugCorrect(code: string) {
     const r = this.rooms.get(code)?.round;
@@ -725,7 +729,7 @@ export class GameManager {
         const r = h.results.get(me.id);
         if (r && !r.correct) missed.push({ round: h.index, title: h.track.title, artist: h.track.artist, reason: h.voided ? 'voided' : r.timedOut ? 'timeout' : 'wrong' });
       }
-      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id), rating: room.ratingChanges.get(me.id) ?? null };
+      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id) };
     }
     return {
       code: room.code, mode: room.mode, phase: room.phase, you: me.id, hostId: room.hostId, players,

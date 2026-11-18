@@ -488,8 +488,9 @@ describe('salas: tamaño y competitivo', () => {
     }
     expect(last.get('a')!.phase).toBe('results');
     await vi.runAllTimersAsync();
-    const ra = last.get('a')!.results!.rating!;
-    const rb = last.get('b')!.results!.rating!;
+    const ra = gm._debugRating(code, id('ra').playerId)!;
+    const rb = gm._debugRating(code, id('rb').playerId)!;
+    expect(JSON.stringify(last.get('a')!.results)).not.toMatch(/"(mmr|rating|rd|vol)"/); // el MMR es secreto
     expect(ra.delta).toBeGreaterThan(0);
     expect(rb.delta).toBeLessThan(0);
     expect(last.get('a')!.results!.youWon).toBe(true);
@@ -504,7 +505,7 @@ describe('salas: tamaño y competitivo', () => {
     await vi.runAllTimersAsync();
     expect(last.get('b2')!.phase).toBe('results');
     expect(last.get('b2')!.results!.youWon).toBe(true);
-    expect(last.get('b2')!.results!.rating!.delta).toBeGreaterThan(0);
+    expect(gm._debugRating((r2 as any).code, id('rb').playerId)!.delta).toBeGreaterThan(0);
     void r2;
   });
 });
