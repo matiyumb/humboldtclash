@@ -22,9 +22,11 @@ export interface Track {
   cover?: string;
   /** Popularidad (Deezer «rank»): define la dificultad. */
   rank?: number;
+  /** Oyentes en Last.fm (si hay LASTFM_API_KEY): afina la dificultad mejor que «rank». */
+  listeners?: number;
 }
 
-const titleKey = (t: string) =>
+export const titleKey = (t: string) =>
   t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s*[([].*?(feat|ft\.|with|con ).*?[)\]]/g, '').replace(/[^a-z0-9ñ]+/g, ' ').trim();
 
 /** Se queda con una pista por título (sin repetir canciones ni versiones "feat."). */

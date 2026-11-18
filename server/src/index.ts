@@ -8,6 +8,7 @@ import { RANKS, rankFor, sanitizeSettings, type Identity, type MixTrack } from '
 import { Catalog, remoteAllowed } from './catalog.js';
 import { AudioProxy } from './audioProxy.js';
 import { Deezer, DeezerError } from './deezer.js';
+import { LastFm } from './lastfm.js';
 import { Library } from './library.js';
 import { GameManager, cleanNickname } from './game.js';
 import { createStore, emptyProfile } from './store.js';
@@ -20,9 +21,10 @@ const CATALOG_DIR = resolve(process.env.CATALOG_DIR ?? ROOT);
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const DEEZER_ON = process.env.DEEZER !== 'off';
+const LASTFM_KEY = process.env.LASTFM_API_KEY?.trim();
 
 const store = await createStore(ROOT);
-const library = new Library(new Catalog(CATALOG_DIR), DEEZER_ON ? new Deezer() : null, store);
+const library = new Library(new Catalog(CATALOG_DIR), DEEZER_ON ? new Deezer() : null, store, LASTFM_KEY ? new LastFm(LASTFM_KEY) : null);
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1); // Render pone un proxy delante: IP real del usuario
@@ -36,7 +38,7 @@ const deezerError = (res: express.Response, e: unknown) =>
 
 app.get('/api/config', (_req, res) => res.json({ ads: process.env.ADS === '1', adsClient: process.env.ADS_CLIENT ?? null, store: store.kind }));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, rooms: games.roomCount(), deezer: DEEZER_ON, store: store.kind }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, rooms: games.roomCount(), deezer: DEEZER_ON, lastfm: !!LASTFM_KEY, store: store.kind }));
 
 // ---------- Catálogos ----------
 app.get('/api/catalogs', async (_req, res) => {
