@@ -41,6 +41,21 @@ function suite(name: string, make: () => Promise<Store>) {
       expect(await s.deleteMix('clave-dueno', mix.id)).toBe(true);
       expect(await s.mix(mix.id)).toBeNull();
     });
+
+    it('cuentas y MMR competitivo; ranking por MMR', async () => {
+      const run = Date.now().toString(36);
+      const acc = { username: `Ana${run}`.slice(0, 16), usernameKey: `ana${run}`.slice(0, 16), passHash: 'scrypt$x$y', playerId: `cuenta-${run}-xxxxxxxx`, secret: 'secreto-xxxxxxxxxxxx', createdAt: Date.now() };
+      expect(await s.createAccount(acc)).toBe(true);
+      expect(await s.createAccount({ ...acc, playerId: `otra-${run}-xxxxxxxxxx` })).toBe(false);
+      expect((await s.account(acc.usernameKey))!.playerId).toBe(acc.playerId);
+      expect((await s.accountOf(acc.playerId))!.username).toBe(acc.username);
+      const p1 = `mmr-a-${run}-xxxxxxxxx`, p2 = `mmr-b-${run}-xxxxxxxxx`;
+      await s.recordRanked([{ playerId: p1, mmr: 1662, rd: 290, vol: 0.06, won: true }, { playerId: p2, mmr: 1338, rd: 290, vol: 0.06, won: false }]);
+      await s.recordRanked([{ playerId: p1, mmr: 1700, rd: 260, vol: 0.06, won: true }]);
+      expect(await s.profile(p1)).toMatchObject({ mmr: 1700, rankedGames: 2, rankedWins: 2 });
+      const top = (await s.leaderboard(100, 'mmr')).filter((r) => r.playerId === p1 || r.playerId === p2);
+      expect(top.map((r) => r.mmr)).toEqual([1700, 1338]);
+    });
   });
 }
 

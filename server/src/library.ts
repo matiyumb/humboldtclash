@@ -96,10 +96,22 @@ export class Library {
     return out;
   }
 
-  async list(): Promise<{ featured: CatalogSummary[]; local: CatalogSummary[]; deezerOnline: boolean }> {
+  /**
+   * Portada del juego:
+   *  - trending: artistas más sonados ahora (lista de éxitos de Deezer, se renueva sola)
+   *  - playlists: «Éxitos del momento» + playlists oficiales más escuchadas de Deezer
+   *  - featured: extras opcionales de catalog/destacados.json
+   */
+  async list(): Promise<{ trending: CatalogSummary[]; playlists: CatalogSummary[]; featured: CatalogSummary[]; local: CatalogSummary[]; deezerOnline: boolean }> {
     this.local.refresh();
-    const featured = await this.featured().catch(() => []);
-    return { featured, local: this.local.list(), deezerOnline: featured.some((f) => f.kind === 'artist') };
+    const chartCard: CatalogSummary = { id: 'deezer:chart', kind: 'playlist', source: 'deezer', name: 'Éxitos del momento', subtitle: 'Top 100 de Deezer', trackCount: null, playable: true, artists: [], picture: null };
+    const [trending, official, featured] = await Promise.all([
+      this.deezer ? this.deezer.chartArtists(12).catch(() => []) : [],
+      this.deezer ? this.deezer.chartPlaylists(10).catch(() => []) : [],
+      this.featured().then((f) => f.filter((x) => x.id !== 'deezer:chart')).catch(() => []),
+    ]);
+    const playlists = this.deezer ? [chartCard, ...official] : [];
+    return { trending, playlists, featured, local: this.local.list(), deezerOnline: trending.length > 0 };
   }
 
   async search(q: string): Promise<CatalogSummary[]> {

@@ -4,13 +4,16 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Server } from 'socket.io';
-import { rankFor, sanitizeSettings, type Identity, type MixTrack } from '../../shared/types.js';
+import { RANKS, rankFor, sanitizeSettings, type Identity, type MixTrack } from '../../shared/types.js';
 import { Catalog, remoteAllowed } from './catalog.js';
 import { AudioProxy } from './audioProxy.js';
 import { Deezer, DeezerError } from './deezer.js';
 import { Library } from './library.js';
 import { GameManager, cleanNickname } from './game.js';
 import { createStore } from './store.js';
+import { login, register } from './accounts.js';
+import { parseSongLines } from './importer.js';
+import { Matchmaker, type QueueEntry } from './matchmaking.js';
 
 const ROOT = resolve(process.env.HUMBOLDTCLASH_ROOT ?? process.cwd());
 const CATALOG_DIR = resolve(process.env.CATALOG_DIR ?? ROOT);
@@ -22,6 +25,7 @@ const store = await createStore(ROOT);
 const library = new Library(new Catalog(CATALOG_DIR), DEEZER_ON ? new Deezer() : null, store);
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', 1); // Render pone un proxy delante: IP real del usuario
 app.use(express.json({ limit: '300kb' }));
 const server = createServer(app);
 const io = new Server(server, { serveClient: false, pingInterval: 10_000, pingTimeout: 8_000 });
@@ -29,6 +33,8 @@ const games = new GameManager(library, (socketId, event, payload) => io.to(socke
 
 const deezerError = (res: express.Response, e: unknown) =>
   res.status(502).json({ error: e instanceof DeezerError ? e.message : 'Error consultando Deezer.' });
+
+app.get('/api/config', (_req, res) => res.json({ ads: process.env.ADS === '1', adsClient: process.env.ADS_CLIENT ?? null, store: store.kind }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, rooms: games.roomCount(), deezer: DEEZER_ON, store: store.kind }));
 
@@ -54,6 +60,26 @@ app.get('/api/deezer/artista/:id/canciones', async (req, res) => {
   try { res.json(await library.deezer.artistMixTracks(id)); } catch (e) { deezerError(res, e); }
 });
 
+app.get('/api/deezer/playlist/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!library.deezer || !Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Enlace de playlist no válido.' });
+  try { res.json(await library.deezer.playlistSummary(id)); } catch (e) { deezerError(res, e); }
+});
+
+app.post('/api/deezer/emparejar', async (req, res) => {
+  if (!library.deezer) return res.json({ found: [], missing: [] });
+  const text = typeof req.body?.text === 'string' ? req.body.text.slice(0, 40_000) : '';
+  const items = parseSongLines(text).slice(0, 150);
+  const found: MixTrack[] = [];
+  const missing: string[] = [];
+  for (let i = 0; i < items.length; i += 3) {
+    const batch = items.slice(i, i + 3);
+    const got = await Promise.all(batch.map((x) => library.deezer!.matchLine(x.artist, x.title)));
+    got.forEach((t, k) => (t ? found.push(t) : missing.push(`${batch[k].artist ? batch[k].artist + ' - ' : ''}${batch[k].title}`)));
+  }
+  res.json({ found, missing });
+});
+
 app.get('/api/catalogs/:id/check', async (req, res) => {
   const settings = sanitizeSettings({ rounds: req.query.rondas, difficulty: req.query.dificultad, shuffle: true });
   const { resolved: _omit, ...check } = await library.check(req.params.id, settings);
@@ -73,13 +99,27 @@ app.get('/api/perfil/:playerId', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const p = (await store.profile(req.params.playerId)) ?? { playerId: req.params.playerId, nickname: '', points: 0, games: 0, wins: 0, correct: 0, best: 0 };
   const { current, next } = rankFor(p.wins);
-  res.json({ ...p, rank: current, nextRank: next, persistent: store.kind === 'postgres' });
+  const acc = await store.accountOf(req.params.playerId);
+  res.json({ ...p, rank: current, nextRank: next, persistent: store.kind === 'postgres', username: acc?.username ?? null });
 });
 
-app.get('/api/ranking', async (_req, res) => {
+app.get('/api/ranking', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  const rows = await store.leaderboard(20);
+  const rows = await store.leaderboard(20, req.query.por === 'mmr' ? 'mmr' : 'wins');
   res.json(rows.map((r) => ({ ...r, rank: rankFor(r.wins).current.id })));
+});
+
+// ---------- Cuentas ----------
+app.post('/api/cuenta/registro', async (req, res) => {
+  const id = req.body?.identity as Identity | undefined;
+  if (!id || !validId(id.playerId) || !validId(id.secret)) return res.status(400).json({ ok: false, error: 'Identidad no válida. Recarga la página.' });
+  const r = await register(store, req.body?.username, req.body?.password, id);
+  res.status(r.ok ? 200 : 400).json(r);
+});
+
+app.post('/api/cuenta/entrar', async (req, res) => {
+  const r = await login(store, req.body?.username, req.body?.password, req.ip ?? '?');
+  res.status(r.ok ? 200 : 401).json(r);
 });
 
 // ---------- Playlists de usuarios ----------
@@ -180,6 +220,17 @@ if (existsSync(clientDir)) {
 type AckFn = (r: unknown) => void;
 const safeAck = (ack: unknown): AckFn => (typeof ack === 'function' ? (ack as AckFn) : () => {});
 
+// ---------- Competitivo 1v1 ----------
+const matchmaker = new Matchmaker(
+  (a: QueueEntry, b: QueueEntry) => {
+    games.createRankedRoom(a, b).then((r) => {
+      for (const e of [a, b]) io.to(e.socketId).emit(r.ok ? 'ranked:found' : 'ranked:error', r.ok ? { code: r.code } : { error: r.error });
+    }).catch((e) => console.error('[ranked]', e));
+  },
+  (socketId, status) => io.to(socketId).emit('ranked:status', status),
+);
+setInterval(() => matchmaker.tick(Date.now()), 1000).unref();
+
 io.on('connection', (socket) => {
   const on = (event: string, fn: (data: any) => unknown) => {
     socket.on(event, async (data: unknown, ack: unknown) => {
@@ -197,6 +248,18 @@ io.on('connection', (socket) => {
   on('room:leave', () => games.leave(socket.id));
   on('room:setCatalog', (d) => games.setCatalog(socket.id, d.catalogId));
   on('room:setSettings', (d) => games.setSettings(socket.id, d.settings));
+  on('room:setSize', (d) => games.setRoomSize(socket.id, d.size));
+  on('ranked:queue', async (d) => {
+    const id = d.identity as Identity | undefined;
+    if (!id || !validId(id.playerId) || !validId(id.secret)) return { ok: false, error: 'Identidad no válida.' };
+    const acc = await store.accountOf(id.playerId);
+    if (!acc || acc.secret !== id.secret) return { ok: false, error: 'El competitivo es solo para jugadores registrados. Crea tu cuenta o inicia sesión.' };
+    const p = await store.profile(id.playerId);
+    const tier = RANKS.indexOf(rankFor(p?.wins ?? 0).current);
+    matchmaker.join({ playerId: id.playerId, socketId: socket.id, identity: id, nickname: acc.username, mmr: p?.mmr ?? 1500, tier, since: Date.now() });
+    return { ok: true };
+  });
+  on('ranked:cancel', (d) => { if (validId(d.identity?.playerId)) matchmaker.leave(d.identity.playerId); return { ok: true }; });
   on('room:setPublic', (d) => games.setPublic(socket.id, d.isPublic));
   on('room:start', () => games.start(socket.id));
   on('room:playAgain', () => games.playAgain(socket.id));
@@ -204,7 +267,7 @@ io.on('connection', (socket) => {
   on('round:audioFailed', (d) => games.audioFailed(socket.id, d.questionId));
   on('round:answer', (d) => games.answer(socket.id, d.questionId, d.optionId));
   on('time:sync', () => ({ ok: true, now: Date.now() }));
-  socket.on('disconnect', () => games.disconnect(socket.id));
+  socket.on('disconnect', () => { matchmaker.leaveSocket(socket.id); games.disconnect(socket.id); });
 });
 
 const shutdown = async () => { await store.close().catch(() => {}); process.exit(0); };

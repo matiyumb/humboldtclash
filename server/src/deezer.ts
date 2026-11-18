@@ -121,6 +121,46 @@ export class Deezer {
     return { name, tracks: (res.data ?? []).map((d) => deezerToTrack(d, name)).filter((t): t is Track => !!t) };
   }
 
+  /** Artistas más escuchados ahora mismo (lista de éxitos de Deezer, se renueva sola). */
+  async chartArtists(limit = 12): Promise<CatalogSummary[]> {
+    const res = await this.get<{ data: { id: number; name: string; picture_medium?: string; position?: number }[] }>(`/chart/0/artists?limit=${limit}`, 6 * 3600_000);
+    return (res.data ?? []).map((a, i) => ({
+      id: `deezer:artist:${a.id}`, kind: 'artist' as const, source: 'deezer' as const, name: a.name,
+      subtitle: `#${a.position ?? i + 1} esta semana`, trackCount: null, playable: true, artists: [a.name], picture: a.picture_medium ?? null,
+    }));
+  }
+
+  /** Playlists oficiales de Deezer más escuchadas (tops por país, del mundo…). */
+  async chartPlaylists(limit = 10): Promise<CatalogSummary[]> {
+    const res = await this.get<{ data: { id: number; title: string; picture_medium?: string; nb_tracks?: number; user?: { name?: string } }[] }>(`/chart/0/playlists?limit=${limit}`, 6 * 3600_000);
+    return (res.data ?? []).map((p) => ({
+      id: `deezer:playlist:${p.id}`, kind: 'playlist' as const, source: 'deezer' as const, name: p.title,
+      subtitle: `Playlist oficial${p.nb_tracks ? ` · ${p.nb_tracks} canciones` : ''}`, trackCount: null, playable: true, artists: [], picture: p.picture_medium ?? null,
+    }));
+  }
+
+  /** Datos de una playlist (para pegar su enlace). */
+  async playlistSummary(id: number): Promise<CatalogSummary> {
+    const p = await this.get<{ id: number; title: string; picture_medium?: string; nb_tracks?: number; creator?: { name?: string } }>(`/playlist/${id}`, 3600_000);
+    return {
+      id: `deezer:playlist:${p.id}`, kind: 'playlist', source: 'deezer', name: p.title,
+      subtitle: `Playlist${p.creator?.name ? ` de ${p.creator.name}` : ''}${p.nb_tracks ? ` · ${p.nb_tracks} canciones` : ''}`, trackCount: null, playable: true, artists: [], picture: p.picture_medium ?? null,
+    };
+  }
+
+  /** Empareja una línea «Artista - Canción» (o «Canción, Artista» de un CSV) con Deezer. */
+  async matchLine(artist: string, title: string): Promise<MixTrack | null> {
+    const a = artist.trim().slice(0, 80), t = title.trim().slice(0, 120);
+    if (!t) return null;
+    const strict = a ? `artist:"${a.replace(/"/g, '')}" track:"${t.replace(/"/g, '')}"` : t;
+    for (const q of [strict, `${a} ${t}`.trim()]) {
+      const res = await this.get<{ data: DeezerTrackRaw[] }>(`/search?q=${encodeURIComponent(q)}&limit=3`, 24 * 3600_000).catch(() => ({ data: [] as DeezerTrackRaw[] }));
+      const hit = (res.data ?? []).map(toMixTrack).find((x): x is MixTrack => !!x);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   /** Búsqueda de canciones (para armar playlists). */
   async searchTracks(q: string, limit = 25): Promise<MixTrack[]> {
     const query = q.trim().slice(0, 80);

@@ -2,8 +2,9 @@
 // el cliente solo ve identificadores opacos y títulos de opciones.
 
 export const ROUND_MS = 10_000;
-export const REVEAL_PAUSE_MS = 2_000;
-export const MAX_PLAYERS = 5;
+export const REVEAL_PAUSE_MS = 5_000; // pausa entre canciones
+export const MAX_PLAYERS = 10; // tamaño máximo de una sala
+export const DEFAULT_ROOM_SIZE = 5;
 export const MIN_PLAYERS_MULTI = 2;
 export const OPTIONS_PER_QUESTION = 4;
 export const INTRO_MS = 3_500; // cuenta atrás «3, 2, 1» antes de la primera ronda
@@ -19,16 +20,18 @@ export const MIN_TRACKS = MIN_ROUNDS;
 export const LIGHTNING_MS = 400;
 
 export type Difficulty = 'general' | 'mainstream' | 'fan' | 'nicho';
-export type ClipMode = 'normal' | 'one';
 
 export interface GameSettings {
   rounds: number; // 5..20
   difficulty: Difficulty;
-  clip: ClipMode; // «one» = la canción suena solo 1 segundo
+  clipSeconds: number; // duración del fragmento: 1 a 5 s, o 10 (completo)
+  instrumental: boolean; // intenta quitar la voz (efecto karaoke)
   shuffle: boolean; // false = respeta el orden de la playlist
 }
 
-export const DEFAULT_SETTINGS: GameSettings = { rounds: DEFAULT_ROUNDS, difficulty: 'general', clip: 'normal', shuffle: true };
+export const CLIP_CHOICES = [1, 2, 3, 4, 5, 10] as const;
+export const FULL_CLIP = 10;
+export const DEFAULT_SETTINGS: GameSettings = { rounds: DEFAULT_ROUNDS, difficulty: 'general', clipSeconds: FULL_CLIP, instrumental: false, shuffle: true };
 
 export const DIFFICULTIES: { id: Difficulty; name: string; hint: string }[] = [
   { id: 'general', name: 'General', hint: 'Mezcla de todo' },
@@ -43,7 +46,12 @@ export function sanitizeSettings(raw: unknown): GameSettings {
   return {
     rounds: Number.isFinite(rounds) ? Math.min(MAX_ROUNDS, Math.max(MIN_ROUNDS, rounds)) : DEFAULT_ROUNDS,
     difficulty: DIFFICULTIES.some((d) => d.id === r.difficulty) ? (r.difficulty as Difficulty) : 'general',
-    clip: r.clip === 'one' ? 'one' : 'normal',
+    clipSeconds: (() => {
+      const legacy = (r as { clip?: string }).clip === 'one' ? 1 : undefined;
+      const v = Math.round(Number(r.clipSeconds ?? legacy));
+      return (CLIP_CHOICES as readonly number[]).includes(v) ? v : FULL_CLIP;
+    })(),
+    instrumental: r.instrumental === true,
     shuffle: r.shuffle !== false,
   };
 }
@@ -76,8 +84,15 @@ export function rankFor(wins: number): { current: RankDef; next: RankDef | null 
   while (i + 1 < RANKS.length && wins >= RANKS[i + 1].min) i++;
   return { current: RANKS[i], next: RANKS[i + 1] ?? null };
 }
-/** Partida en solitario ganada: al menos el 70 % de aciertos. */
-export const soloWinThreshold = (rounds: number) => Math.ceil(rounds * 0.7);
+// Solo las victorias multijugador (salas y competitivo) cuentan para el rango; el modo solo es práctica.
+
+// ---------- Competitivo (1v1 con MMR Glicko-2) ----------
+export const RANKED_SETTINGS = { rounds: 10, difficulty: 'general' as Difficulty, clipSeconds: FULL_CLIP, instrumental: false, shuffle: true };
+export const RANKED_CATALOG = 'deezer:chart';
+export const DEFAULT_RATING = 1500;
+export interface RatingChange { before: number; after: number; delta: number }
+export interface QueueStatus { searching: boolean; since: number; window: number; queued: number }
+export interface AccountView { username: string; playerId: string }
 
 export interface Profile {
   playerId: string;
@@ -87,8 +102,14 @@ export interface Profile {
   wins: number;
   correct: number;
   best: number;
+  // Competitivo (Glicko-2)
+  mmr: number;
+  rd: number;
+  vol: number;
+  rankedGames: number;
+  rankedWins: number;
 }
-export interface LeaderRow { position: number; playerId: string; nickname: string; points: number; wins: number; games: number }
+export interface LeaderRow { position: number; playerId: string; nickname: string; points: number; wins: number; games: number; mmr: number; rankedGames: number }
 
 // ---------- Playlists de usuarios (mezclas) ----------
 export interface MixTrack {
@@ -192,6 +213,7 @@ export interface StandingRow {
   score: number;
   correct: number;
   left: boolean;
+  avgMs: number | null; // tiempo medio de respuesta en aciertos
 }
 
 export interface MissedSong {
@@ -206,11 +228,12 @@ export interface ResultsView {
   missed: MissedSong[]; // de quien recibe la vista
   totalRounds: number;
   youWon: boolean; // cuenta como victoria para tu rango
+  rating: RatingChange | null; // cambio de MMR (solo competitivo)
 }
 
 export interface RoomState {
   code: string;
-  mode: 'solo' | 'multi';
+  mode: 'solo' | 'multi' | 'ranked';
   isPublic: boolean;
   phase: 'lobby' | 'playing' | 'results';
   you: string;

@@ -266,7 +266,9 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
   afterEach(() => vi.useRealTimers());
 
   it('limita los ajustes a valores válidos', () => {
-    expect(sanitizeSettings({ rounds: 99, difficulty: 'x', clip: 'one', shuffle: false })).toEqual({ rounds: 20, difficulty: 'general', clip: 'one', shuffle: false });
+    expect(sanitizeSettings({ rounds: 99, difficulty: 'x', clip: 'one', shuffle: false })).toEqual({ rounds: 20, difficulty: 'general', clipSeconds: 1, instrumental: false, shuffle: false });
+    expect(sanitizeSettings({ clipSeconds: 3, instrumental: true }).clipSeconds).toBe(3);
+    expect(sanitizeSettings({ clipSeconds: 7 }).clipSeconds).toBe(10);
     expect(sanitizeSettings({ rounds: 2 }).rounds).toBe(5);
     expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
   });
@@ -300,9 +302,9 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
     expect(byDifficulty(tracks, 'nicho', 20)).toHaveLength(20);
   });
 
-  it('partida de 5 rondas en modo 1 segundo; fragmento común aleatorio; rayo; victoria guardada', async () => {
+  it('partida de 5 rondas con fragmento de 1 s; fragmento común aleatorio; rayo; el modo solo es práctica', async () => {
     const { gm, last } = setup();
-    const r = await gm.createRoom('s1', id('z'), 'Zoe', 'solo', 'deezer:artist:10583405', false, { rounds: 5, clip: 'one', difficulty: 'mainstream' });
+    const r = await gm.createRoom('s1', id('z'), 'Zoe', 'solo', 'deezer:artist:10583405', false, { rounds: 5, clipSeconds: 1, difficulty: 'mainstream' });
     expect(r.ok).toBe(true);
     const code = (r as any).code;
     vi.advanceTimersByTime(INTRO_MS);
@@ -326,10 +328,10 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
     const st = last.get('s1')!;
     expect(st.phase).toBe('results');
     expect(st.results!.totalRounds).toBe(5);
-    expect(st.results!.youWon).toBe(true);
+    expect(st.results!.youWon).toBe(false); // práctica: no cuenta para el rango
+    expect(st.results!.standings[0].avgMs).toBeGreaterThan(0);
     await vi.runAllTimersAsync();
-    const p = await store.profile(id('z').playerId);
-    expect(p).toMatchObject({ games: 1, wins: 1, points: 10 + 4 * 9, correct: 5, best: 46 });
+    expect(await store.profile(id('z').playerId)).toBeNull(); // el modo solo no se guarda
   });
 
   it('playlist de usuario: respeta el orden si no se baraja', async () => {
@@ -352,5 +354,157 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
     expect(titles).toEqual(tracks.slice(0, 5).map((t) => t.title));
     expect(await store.deleteMix('otro', mix.id)).toBe(false);
     expect(await store.deleteMix('dueño', mix.id)).toBe(true);
+  });
+});
+
+import { updateRating, winProbability } from '../server/src/glicko';
+import { Matchmaker, compatible, mmrWindow, type QueueEntry } from '../server/src/matchmaking';
+import { register, login } from '../server/src/accounts';
+import { parseSongLines } from '../server/src/importer';
+
+describe('MMR Glicko-2', () => {
+  it('dos jugadores nuevos: el ganador sube y el perdedor baja lo mismo', () => {
+    const fresh = { mmr: 1500, rd: 350, vol: 0.06 };
+    const w = updateRating(fresh, fresh, 1);
+    const l = updateRating(fresh, fresh, 0);
+    expect(w.mmr).toBeGreaterThan(1600);
+    expect(l.mmr).toBe(3000 - w.mmr);
+    expect(w.rd).toBeLessThan(350); // ya se sabe algo más de ellos
+  });
+  it('ganar a alguien mucho mejor da más que ganar a alguien peor', () => {
+    const me = { mmr: 1500, rd: 80, vol: 0.06 };
+    const vsStrong = updateRating(me, { mmr: 1800, rd: 80, vol: 0.06 }, 1).mmr - 1500;
+    const vsWeak = updateRating(me, { mmr: 1200, rd: 80, vol: 0.06 }, 1).mmr - 1500;
+    expect(vsStrong).toBeGreaterThan(vsWeak * 3);
+    expect(winProbability({ mmr: 1800, rd: 80, vol: 0.06 }, me)).toBeGreaterThan(0.8);
+  });
+  it('un veterano (RD bajo) se mueve menos que un novato', () => {
+    const opp = { mmr: 1500, rd: 100, vol: 0.06 };
+    const vet = updateRating({ mmr: 1500, rd: 50, vol: 0.06 }, opp, 1).mmr - 1500;
+    const rookie = updateRating({ mmr: 1500, rd: 300, vol: 0.06 }, opp, 1).mmr - 1500;
+    expect(rookie).toBeGreaterThan(vet * 3);
+  });
+});
+
+describe('emparejamiento competitivo', () => {
+  const e = (id: string, mmr: number, tier: number, since: number): QueueEntry => ({ playerId: `${id}-xxxxxxxxxxxxxx`, socketId: id, identity: { playerId: `${id}-xxxxxxxxxxxxxx`, secret: 's'.repeat(20) }, nickname: id, mmr, tier, since });
+  it('al principio solo mismo rango y ±100 de MMR; la ventana crece con la espera', () => {
+    expect(mmrWindow(0)).toBe(100);
+    expect(mmrWindow(10_000)).toBe(250);
+    expect(compatible(e('a', 1500, 1, 0), e('b', 1580, 1, 0), 0)).toBe(true);
+    expect(compatible(e('a', 1500, 1, 0), e('b', 1700, 1, 0), 0)).toBe(false);
+    expect(compatible(e('a', 1500, 1, 0), e('b', 1700, 1, 0), 15_000)).toBe(true);
+    expect(compatible(e('a', 1500, 1, 0), e('b', 1520, 2, 0), 5_000)).toBe(false); // otro rango
+    expect(compatible(e('a', 1500, 1, 0), e('b', 1520, 2, 0), 25_000)).toBe(true); // rango vecino tras 20 s
+    expect(compatible(e('a', 1500, 0, 0), e('b', 1520, 4, 0), 30_000)).toBe(false);
+    expect(compatible(e('a', 1500, 0, 0), e('b', 1520, 4, 0), 50_000)).toBe(true); // cualquiera tras 45 s
+  });
+  it('elige al rival de MMR más cercano y avisa a quien sigue esperando', () => {
+    const matches: [string, string][] = [];
+    const statuses = new Map<string, number>();
+    const mm = new Matchmaker((a, b) => matches.push([a.nickname, b.nickname]), (sid, s) => statuses.set(sid, s.queued));
+    const t = Date.now();
+    mm.join(e('ana', 1500, 1, t - 1000));
+    mm.join(e('lejos', 1590, 1, t));
+    mm.join(e('cerca', 1510, 1, t));
+    expect(matches).toEqual([['ana', 'lejos']]); // al entrar «lejos» ya había pareja válida
+    mm.join(e('otro', 1530, 1, t));
+    expect(matches[1]).toEqual(['cerca', 'otro']);
+    mm.join(e('solo', 2400, 4, t));
+    expect(matches).toHaveLength(2);
+    expect(statuses.get('solo')).toBe(1);
+    mm.leave('solo-xxxxxxxxxxxxxx');
+    expect(mm.size()).toBe(0);
+  });
+});
+
+describe('cuentas', () => {
+  it('registro, usuario repetido, inicio de sesión y contraseña incorrecta', async () => {
+    const s = new JsonStore(null);
+    const ident = { playerId: 'cuenta-ana-xxxxxxxxxx', secret: 'secreto-ana-xxxxxxxxxx' };
+    expect((await register(s, 'Ana_99', 'clave-segura', ident)).ok).toBe(true);
+    expect((await register(s, 'ana_99', 'otra-clave', { playerId: 'cuenta-otra-xxxxxxxxx', secret: 'secreto-otra-xxxxxxxxx' })).ok).toBe(false);
+    expect((await register(s, 'x', 'clave-segura', ident)).ok).toBe(false);
+    const ok = await login(s, 'ANA_99', 'clave-segura', '1.2.3.4');
+    expect(ok).toEqual({ ok: true, username: 'Ana_99', identity: ident });
+    expect((await login(s, 'Ana_99', 'mal', '1.2.3.4')).ok).toBe(false);
+    expect((await s.account('ana_99'))!.passHash).toMatch(/^scrypt\$/);
+  });
+});
+
+describe('importar listas', () => {
+  it('entiende «Artista - Canción» y el CSV de Exportify', () => {
+    expect(parseSongLines('1. Quevedo - Columbia\nBad Bunny – Tití Me Preguntó\nSolo título')).toEqual([
+      { artist: 'Quevedo', title: 'Columbia' },
+      { artist: 'Bad Bunny', title: 'Tití Me Preguntó' },
+      { artist: '', title: 'Solo título' },
+    ]);
+    const csv = 'Track URI,Track Name,Artist Name(s),Album Name\nspotify:track:1,"Me Porto Bonito","Bad Bunny,Chencho Corleone",Un Verano\nspotify:track:2,Columbia,Quevedo,Columbia';
+    expect(parseSongLines(csv)).toEqual([{ artist: 'Bad Bunny', title: 'Me Porto Bonito' }, { artist: 'Quevedo', title: 'Columbia' }]);
+  });
+});
+
+describe('salas: tamaño y competitivo', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }));
+  afterEach(() => vi.useRealTimers());
+
+  it('el anfitrión cambia el tamaño de la sala (2 a 10)', async () => {
+    const { gm, last } = setup();
+    const code = ((await gm.createRoom('h', id('h'), 'Host', 'multi')) as any).code;
+    expect(last.get('h')!.maxPlayers).toBe(5);
+    expect(gm.setRoomSize('h', 11).ok).toBe(false);
+    expect(gm.setRoomSize('h', 2).ok).toBe(true);
+    gm.joinRoom('g', code, id('g'), 'Gaby');
+    expect(gm.joinRoom('x', code, id('x'), 'Xime')).toEqual({ ok: false, error: 'La sala está llena (máximo 2 jugadores).' });
+    expect(gm.setRoomSize('g', 10).ok).toBe(false);
+    expect(gm.setRoomSize('h', 10).ok).toBe(true);
+    expect(gm.joinRoom('x', code, id('x'), 'Xime').ok).toBe(true);
+  });
+
+  it('competitivo 1v1: gana el que más puntúa y el MMR cambia; nadie puede unirse; rendirse = perder', async () => {
+    const s = new JsonStore(null);
+    const deezerChart: typeof fetch = async (input) => {
+      const u = new URL(String(input));
+      if (u.pathname === '/chart/0/tracks') return new Response(JSON.stringify({ data: Array.from({ length: 30 }, (_, i) => ({ id: 70 + i, title: `Hit ${i}`, preview: `https://cdnt-preview.dzcdn.net/h${i}.mp3`, rank: 1000 - i, artist: { id: 1, name: 'Varios' } })) }), { status: 200 });
+      return new Response('{}', { status: 404 });
+    };
+    const lib = new Library(catalog, new Deezer('https://api.deezer.test', deezerChart), s);
+    const last = new Map<string, RoomState>();
+    const gm = new GameManager(lib, (sid, ev, payload) => { if (ev === 'room:state') last.set(sid, payload as RoomState); });
+    const r = await gm.createRankedRoom({ socketId: 'a', identity: id('ra'), nickname: 'Ana' }, { socketId: 'b', identity: id('rb'), nickname: 'Beto' });
+    expect(r.ok).toBe(true);
+    const code = (r as any).code;
+    expect(last.get('a')!.mode).toBe('ranked');
+    expect(gm.joinRoom('c', code, id('rc'), 'Colado')).toEqual({ ok: false, error: 'No existe una sala con ese código.' });
+    vi.advanceTimersByTime(INTRO_MS);
+    for (let i = 0; i < 10; i++) {
+      const q = last.get('a')!.round!.questionId;
+      gm.ready('a', q); gm.ready('b', q);
+      vi.advanceTimersByTime(1_000);
+      gm.answer('a', q, gm._debugCorrect(code)); // Ana acierta
+      const wrong = last.get('b')!.round!.options.find((o) => o.id !== gm._debugCorrect(code))!.id;
+      gm.answer('b', q, wrong); // Beto falla
+      vi.advanceTimersByTime(REVEAL_PAUSE_MS);
+    }
+    expect(last.get('a')!.phase).toBe('results');
+    await vi.runAllTimersAsync();
+    const ra = last.get('a')!.results!.rating!;
+    const rb = last.get('b')!.results!.rating!;
+    expect(ra.delta).toBeGreaterThan(0);
+    expect(rb.delta).toBeLessThan(0);
+    expect(last.get('a')!.results!.youWon).toBe(true);
+    expect(await s.profile(id('ra').playerId)).toMatchObject({ rankedGames: 1, rankedWins: 1, wins: 1 });
+    expect(await s.profile(id('rb').playerId)).toMatchObject({ rankedGames: 1, rankedWins: 0, wins: 0 });
+    expect((await gm.playAgain('a')).ok).toBe(false);
+
+    // Rendirse a mitad de partida: gana el rival aunque vaya perdiendo.
+    const r2 = await gm.createRankedRoom({ socketId: 'a2', identity: id('ra'), nickname: 'Ana' }, { socketId: 'b2', identity: id('rb'), nickname: 'Beto' });
+    vi.advanceTimersByTime(INTRO_MS);
+    gm.leave('a2');
+    await vi.runAllTimersAsync();
+    expect(last.get('b2')!.phase).toBe('results');
+    expect(last.get('b2')!.results!.youWon).toBe(true);
+    expect(last.get('b2')!.results!.rating!.delta).toBeGreaterThan(0);
+    void r2;
   });
 });

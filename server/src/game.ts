@@ -2,11 +2,12 @@ import { randomBytes, createHash, timingSafeEqual, randomInt } from 'node:crypto
 import { extname } from 'node:path';
 import {
   MAX_PLAYERS, MIN_PLAYERS_MULTI, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUND_MS, LIGHTNING_MS,
-  scoreFor, sanitizeSettings, soloWinThreshold, rankFor, DEFAULT_SETTINGS, type GameSettings,
+  scoreFor, sanitizeSettings, rankFor, DEFAULT_SETTINGS, DEFAULT_RATING, DEFAULT_ROOM_SIZE, RANKED_SETTINGS, RANKED_CATALOG, type GameSettings, type RatingChange,
   type Ack, type Identity, type MissedSong, type PlayerView, type RevealView, type RoomState, type RoundResult, type StandingRow,
 } from '../../shared/types.js';
 import { AUDIO_TYPES, type Track } from './catalog.js';
 import type { Library, Resolved } from './library.js';
+import { DEFAULT_RD, DEFAULT_VOL, updateRating } from './glicko.js';
 import type { PublicRoom } from '../../shared/types.js';
 
 export const LOAD_TIMEOUT_MS = 15_000;
@@ -52,7 +53,9 @@ interface HistoryEntry { index: number; track: Track; voided: boolean; results: 
 
 interface Room {
   code: string;
-  mode: 'solo' | 'multi';
+  mode: 'solo' | 'multi' | 'ranked';
+  maxPlayers: number;
+  ratingChanges: Map<string, RatingChange>;
   phase: 'lobby' | 'playing' | 'results';
   hostId: string;
   players: Player[];
@@ -135,6 +138,67 @@ export class GameManager {
     }).catch(() => {});
   }
 
+  /** Tamaño de la sala (2 a 10 jugadores); solo el anfitrión, en la sala de espera. */
+  setRoomSize(socketId: string, size: unknown): Ack {
+    const ctx = this.ctx(socketId);
+    if (!ctx) return { ok: false, error: 'No estás en una sala.' };
+    const { room, player } = ctx;
+    if (room.mode !== 'multi') return { ok: false, error: 'Solo las salas multijugador tienen tamaño.' };
+    if (room.hostId !== player.id) return { ok: false, error: 'Solo el anfitrión puede cambiar el tamaño.' };
+    if (room.phase !== 'lobby') return { ok: false, error: 'La partida ya empezó.' };
+    const n = Math.round(Number(size));
+    const inRoom = room.players.filter((p) => !p.left).length;
+    if (!Number.isFinite(n) || n < MIN_PLAYERS_MULTI || n > MAX_PLAYERS) return { ok: false, error: `El tamaño va de ${MIN_PLAYERS_MULTI} a ${MAX_PLAYERS} jugadores.` };
+    if (n < inRoom) return { ok: false, error: `Ya hay ${inRoom} jugadores en la sala.` };
+    room.maxPlayers = n;
+    this.broadcast(room);
+    return { ok: true };
+  }
+
+  /** Crea una partida competitiva 1v1 ya emparejada y la empieza. */
+  async createRankedRoom(a: { socketId: string; identity: Identity; nickname: string }, b: { socketId: string; identity: Identity; nickname: string }): Promise<Ack<{ code: string }>> {
+    const check = await this.library.check(RANKED_CATALOG, RANKED_SETTINGS);
+    if (!check.ok || !check.resolved) return { ok: false, error: check.message };
+    let code: string;
+    do {
+      code = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+    } while (this.rooms.has(code));
+    for (const e of [a, b]) this.detachSocket(e.socketId);
+    const pa = this.newPlayer(a.identity, a.nickname, a.socketId);
+    const pb = this.newPlayer(b.identity, a.nickname === b.nickname ? `${b.nickname.slice(0, 13)} 2` : b.nickname, b.socketId);
+    const room: Room = {
+      code, mode: 'ranked', phase: 'lobby', hostId: pa.id, players: [pa, pb],
+      catalogId: RANKED_CATALOG, deck: [], pool: [], used: new Set(), round: null, history: [],
+      isPublic: false, catalogName: check.resolved.name, starting: false, introUntil: null,
+      settings: { ...RANKED_SETTINGS }, recorded: false, maxPlayers: 2, ratingChanges: new Map(),
+    };
+    this.rooms.set(code, room);
+    this.sockets.set(a.socketId, { code, playerId: pa.id });
+    this.sockets.set(b.socketId, { code, playerId: pb.id });
+    this.loadRanks(room);
+    const r = await this.startGame(room, check.resolved);
+    if (!r.ok) { this.deleteRoom(room); return r; }
+    return { ok: true, code };
+  }
+
+  /** Actualiza el MMR (Glicko-2) de los dos jugadores de una partida competitiva. */
+  private async rateRanked(room: Room, won: Set<string>) {
+    const store = this.library.store!;
+    const [a, b] = room.players;
+    if (!a || !b) return;
+    const profiles = await store.profiles([a.id, b.id]);
+    const cur = (id: string) => { const p = profiles.get(id); return { mmr: p?.mmr ?? DEFAULT_RATING, rd: p?.rd ?? DEFAULT_RD, vol: p?.vol ?? DEFAULT_VOL }; };
+    const ra = cur(a.id), rb = cur(b.id);
+    const sa = won.has(a.id) ? (won.has(b.id) ? 0.5 : 1) : won.has(b.id) ? 0 : 0.5;
+    const na = updateRating(ra, rb, sa), nb = updateRating(rb, ra, 1 - sa);
+    await store.recordRanked([
+      { playerId: a.id, ...na, won: sa === 1 },
+      { playerId: b.id, ...nb, won: sa === 0 },
+    ]);
+    room.ratingChanges.set(a.id, { before: ra.mmr, after: na.mmr, delta: na.mmr - ra.mmr });
+    room.ratingChanges.set(b.id, { before: rb.mmr, after: nb.mmr, delta: nb.mmr - rb.mmr });
+  }
+
   setSettings(socketId: string, raw: unknown): Ack {
     const ctx = this.ctx(socketId);
     if (!ctx) return { ok: false, error: 'No estás en una sala.' };
@@ -151,9 +215,9 @@ export class GameManager {
     for (const room of this.rooms.values()) {
       if (room.mode !== 'multi' || !room.isPublic || room.phase !== 'lobby') continue;
       const active = room.players.filter((p) => !p.left);
-      if (active.length >= MAX_PLAYERS || !active.some((p) => p.connected)) continue;
+      if (active.length >= room.maxPlayers || !active.some((p) => p.connected)) continue;
       const host = room.players.find((p) => p.id === room.hostId);
-      out.push({ code: room.code, host: host?.nickname ?? '—', catalogName: room.catalogName, players: active.length, maxPlayers: MAX_PLAYERS });
+      out.push({ code: room.code, host: host?.nickname ?? '—', catalogName: room.catalogName, players: active.length, maxPlayers: room.maxPlayers });
     }
     return out.slice(0, 30);
   }
@@ -212,6 +276,7 @@ export class GameManager {
       catalogId: typeof catalogId === 'string' ? catalogId : null,
       deck: [], pool: [], used: new Set(), round: null, history: [],
       isPublic: mode === "multi" && isPublic === true, catalogName, starting: false, introUntil: null, settings, recorded: false,
+      maxPlayers: mode === 'solo' ? 1 : DEFAULT_ROOM_SIZE, ratingChanges: new Map(),
     };
     this.rooms.set(code, room);
     this.sockets.set(socketId, { code, playerId: player.id });
@@ -254,9 +319,9 @@ export class GameManager {
       return { ok: true, code, rejoined: true };
     }
 
-    if (!room || room.mode === 'solo') return { ok: false, error: 'No existe una sala con ese código.' };
+    if (!room || room.mode !== 'multi') return { ok: false, error: 'No existe una sala con ese código.' };
     if (room.phase !== 'lobby') return { ok: false, error: 'La partida ya empezó: no se pueden unir más jugadores.' };
-    if (room.players.filter((p) => !p.left).length >= MAX_PLAYERS) return { ok: false, error: `La sala está llena (máximo ${MAX_PLAYERS} jugadores).` };
+    if (room.players.filter((p) => !p.left).length >= room.maxPlayers) return { ok: false, error: `La sala está llena (máximo ${room.maxPlayers} jugadores).` };
     const nick = cleanNickname(nickname);
     if (!nick) return { ok: false, error: 'Escribe un apodo (1 a 16 caracteres).' };
     this.detachSocket(socketId);
@@ -311,6 +376,7 @@ export class GameManager {
     if (!ctx) return { ok: false, error: 'No estás en una sala.' };
     const { room, player } = ctx;
     if (room.phase !== 'results') return { ok: false, error: 'La partida no ha terminado.' };
+    if (room.mode === 'ranked') return { ok: false, error: 'En competitivo, busca otra partida desde el inicio.' };
     if (room.hostId !== player.id) return { ok: false, error: 'Solo el anfitrión puede empezar otra partida.' };
     room.players = room.players.filter((p) => !p.left);
     for (const p of room.players) { p.score = 0; p.correct = 0; }
@@ -404,6 +470,8 @@ export class GameManager {
     if (explicitLeave) {
       if (room.phase === 'lobby') room.players = room.players.filter((p) => p !== player);
       else player.left = true;
+      // Competitivo: abandonar es rendirse; la partida termina y gana el rival.
+      if (room.mode === 'ranked' && room.phase === 'playing') { player.connected = false; return this.finish(room); }
     } else if (room.phase === 'lobby') {
       this.scheduleLobbyRemoval(room, player);
     }
@@ -591,10 +659,12 @@ export class GameManager {
     this.broadcast(room);
   }
 
-  /** Victoria: 1.º puesto en multijugador (empates incluidos) o ≥70 % de aciertos en solitario. */
+  /** Victoria: 1.º puesto en multijugador o competitivo (empates incluidos). El modo solo es práctica. */
   private winners(room: Room): Set<string> {
     const active = room.players.filter((p) => !p.left);
-    if (room.mode === 'solo') return new Set(active.filter((p) => p.correct >= soloWinThreshold(room.settings.rounds)).map((p) => p.id));
+    if (room.mode === 'solo') return new Set();
+    // Competitivo: si el rival abandonó, gana quien sigue (aunque tenga 0 puntos).
+    if (room.mode === 'ranked' && active.length === 1) return new Set([active[0].id]);
     if (active.length < MIN_PLAYERS_MULTI) return new Set();
     const top = Math.max(...active.map((p) => p.score));
     return new Set(active.filter((p) => p.score === top && top > 0).map((p) => p.id));
@@ -604,11 +674,15 @@ export class GameManager {
     room.phase = 'results';
     if (room.timer) clearTimeout(room.timer);
     if (room.round) this.tickets.delete(room.round.token);
-    if (!room.recorded && this.library.store) {
+    // Solo cuentan las partidas multijugador; el modo solo es práctica y no se guarda.
+    if (!room.recorded && this.library.store && room.mode !== 'solo') {
       room.recorded = true;
+      const store = this.library.store;
       const won = this.winners(room);
-      const outcomes = room.players.filter((p) => !p.left).map((p) => ({ playerId: p.id, nickname: p.nickname, score: p.score, correct: p.correct, won: won.has(p.id) }));
-      this.library.store.recordGame(outcomes).then(() => { for (const o of outcomes) this.ranks.delete(o.playerId); this.loadRanks(room); }).catch((e) => console.error('No se pudo guardar la partida', e));
+      const outcomes = room.players.filter((p) => !p.left || room.mode === 'ranked').map((p) => ({ playerId: p.id, nickname: p.nickname, score: p.score, correct: p.correct, won: won.has(p.id) }));
+      const job = room.mode === 'ranked' ? this.rateRanked(room, won).then(() => store.recordGame(outcomes)) : store.recordGame(outcomes);
+      job.then(() => { for (const o of outcomes) this.ranks.delete(o.playerId); this.loadRanks(room); if (this.rooms.has(room.code)) this.broadcast(room); })
+        .catch((e: unknown) => console.error('No se pudo guardar la partida', e));
     }
     this.afterPresenceChange(room);
   }
@@ -633,7 +707,7 @@ export class GameManager {
         // Las opciones solo se muestran cuando arranca el temporizador.
         options: round.phase === 'loading' ? [] : round.options,
         audioUrl: `/api/audio/${round.token}`,
-        clip: { start: round.clipStart, seconds: room.settings.clip === 'one' ? 1 : ROUND_MS / 1000 },
+        clip: { start: round.clipStart, seconds: room.settings.clipSeconds },
         deadline: round.deadline, serverNow: Date.now(),
         yourAnswer: mine ? (round.phase === 'reveal' ? { ...mine } : { optionId: mine.optionId }) : null,
         reveal: round.reveal,
@@ -641,13 +715,17 @@ export class GameManager {
     }
     let results: RoomState['results'] = null;
     if (room.phase === 'results') {
-      const standings = rankStandings(room.players.map((p) => ({ playerId: p.id, nickname: p.nickname, score: p.score, correct: p.correct, left: p.left })));
+      const avg = (id: string) => {
+        const ms = room.history.map((h) => h.results.get(id)).filter((r) => r?.correct && r.ms != null).map((r) => r!.ms!);
+        return ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length) : null;
+      };
+      const standings = rankStandings(room.players.map((p) => ({ playerId: p.id, nickname: p.nickname, score: p.score, correct: p.correct, left: p.left, avgMs: avg(p.id) })));
       const missed: MissedSong[] = [];
       for (const h of room.history) {
         const r = h.results.get(me.id);
         if (r && !r.correct) missed.push({ round: h.index, title: h.track.title, artist: h.track.artist, reason: h.voided ? 'voided' : r.timedOut ? 'timeout' : 'wrong' });
       }
-      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id) };
+      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id), rating: room.ratingChanges.get(me.id) ?? null };
     }
     return {
       code: room.code, mode: room.mode, phase: room.phase, you: me.id, hostId: room.hostId, players,
@@ -655,7 +733,7 @@ export class GameManager {
       isPublic: room.isPublic,
       settings: room.settings,
       intro: room.phase === "playing" && !room.round && room.introUntil ? { startsAt: room.introUntil, serverNow: Date.now() } : null,
-      round: roundView, results, maxPlayers: MAX_PLAYERS, minPlayers: MIN_PLAYERS_MULTI,
+      round: roundView, results, maxPlayers: room.maxPlayers, minPlayers: MIN_PLAYERS_MULTI,
     };
   }
 }

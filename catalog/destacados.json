@@ -1,19 +1,6 @@
 {
-  "$comment": "Artistas y playlists de Deezer que salen destacados en la pantalla de inicio. Cualquier otro artista se puede buscar desde el juego.",
-  "exitos": true,
-  "artistas": [
-    "Bad Bunny",
-    "Quevedo",
-    "Omar Courtz",
-    "Feid",
-    "Karol G",
-    "Myke Towers",
-    "Rauw Alejandro",
-    "Rosalía",
-    "Bizarrap",
-    "Eladio Carrión",
-    "Mora",
-    "Young Miko"
-  ],
+  "$comment": "Los artistas más sonados de la semana y las playlists oficiales salen solos de la lista de éxitos de Deezer. Aquí puedes añadir extras fijos (opcional): nombres de artistas o ids de playlists de Deezer.",
+  "exitos": false,
+  "artistas": [],
   "playlists": []
 }

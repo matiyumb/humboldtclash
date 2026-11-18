@@ -1,13 +1,16 @@
-// Datos que deben sobrevivir a reinicios: perfiles (puntos, victorias, rango) y playlists de usuarios.
+// Datos que deben sobrevivir a reinicios: perfiles (puntos, victorias, rango, MMR), cuentas y playlists.
 // - Con DATABASE_URL (Postgres: Neon, Supabase, Render…) se guarda en la base de datos.
 // - Sin ella, en un archivo JSON (data/humboldtclash.json). En Render gratis ese archivo se borra en cada despliegue.
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import type { LeaderRow, Mix, MixSummary, MixTrack, Profile } from '../../shared/types.js';
+import { DEFAULT_RATING, type LeaderRow, type Mix, type MixSummary, type MixTrack, type Profile } from '../../shared/types.js';
+import { DEFAULT_RD, DEFAULT_VOL } from './glicko.js';
 
 export interface GameOutcome { playerId: string; nickname: string; score: number; correct: number; won: boolean }
+export interface RankedOutcome { playerId: string; mmr: number; rd: number; vol: number; won: boolean }
 export interface MixInput { name: string; tracks: MixTrack[] }
+export interface Account { username: string; usernameKey: string; passHash: string; playerId: string; secret: string; createdAt: number }
 
 export interface Store {
   readonly kind: 'postgres' | 'json' | 'memory';
@@ -15,7 +18,11 @@ export interface Store {
   profile(playerId: string): Promise<Profile | null>;
   profiles(ids: string[]): Promise<Map<string, Profile>>;
   recordGame(outcomes: GameOutcome[]): Promise<void>;
-  leaderboard(limit: number): Promise<LeaderRow[]>;
+  recordRanked(outcomes: RankedOutcome[]): Promise<void>;
+  leaderboard(limit: number, by?: 'wins' | 'mmr'): Promise<LeaderRow[]>;
+  createAccount(a: Account): Promise<boolean>; // false si el usuario ya existe
+  account(usernameKey: string): Promise<Account | null>;
+  accountOf(playerId: string): Promise<Account | null>;
   mix(id: string): Promise<Mix | null>;
   mixesOf(owner: string): Promise<MixSummary[]>;
   saveMix(owner: string, ownerName: string, input: MixInput, id?: string): Promise<Mix>;
@@ -23,7 +30,10 @@ export interface Store {
   close(): Promise<void>;
 }
 
-const emptyProfile = (playerId: string, nickname: string): Profile => ({ playerId, nickname, points: 0, games: 0, wins: 0, correct: 0, best: 0 });
+export const emptyProfile = (playerId: string, nickname: string): Profile => ({
+  playerId, nickname, points: 0, games: 0, wins: 0, correct: 0, best: 0,
+  mmr: DEFAULT_RATING, rd: DEFAULT_RD, vol: DEFAULT_VOL, rankedGames: 0, rankedWins: 0,
+});
 
 function summarize(m: Mix): MixSummary {
   const covers = [...new Set(m.tracks.map((t) => t.cover).filter((c): c is string => !!c))].slice(0, 4);
@@ -43,15 +53,16 @@ function applyOutcome(p: Profile, o: GameOutcome): Profile {
   };
 }
 
-function rankRows(rows: Profile[], limit: number): LeaderRow[] {
-  const sorted = [...rows].filter((p) => p.games > 0).sort((a, b) => b.wins - a.wins || b.points - a.points).slice(0, limit);
+function rankRows(rows: Profile[], limit: number, by: 'wins' | 'mmr'): LeaderRow[] {
+  const pool = by === 'mmr' ? rows.filter((p) => p.rankedGames > 0) : rows.filter((p) => p.games > 0);
+  const sorted = [...pool].sort(by === 'mmr' ? (a, b) => b.mmr - a.mmr || b.rankedWins - a.rankedWins : (a, b) => b.wins - a.wins || b.points - a.points).slice(0, limit);
   let lastKey = '';
   let lastPos = 0;
   return sorted.map((p, i) => {
-    const key = `${p.wins}:${p.points}`;
+    const key = by === 'mmr' ? `${p.mmr}` : `${p.wins}:${p.points}`;
     const position = key === lastKey ? lastPos : i + 1;
     lastKey = key; lastPos = position;
-    return { position, playerId: p.playerId, nickname: p.nickname, points: p.points, wins: p.wins, games: p.games };
+    return { position, playerId: p.playerId, nickname: p.nickname, points: p.points, wins: p.wins, games: p.games, mmr: p.mmr, rankedGames: p.rankedGames };
   });
 }
 
@@ -60,6 +71,7 @@ export class JsonStore implements Store {
   kind: 'json' | 'memory';
   private profilesMap = new Map<string, Profile>();
   private mixesMap = new Map<string, Mix>();
+  private accounts = new Map<string, Account>();
   private timer?: NodeJS.Timeout;
 
   constructor(private file: string | null) {
@@ -70,8 +82,9 @@ export class JsonStore implements Store {
     if (!this.file || !existsSync(this.file)) return;
     try {
       const raw = JSON.parse(readFileSync(this.file, 'utf8'));
-      for (const p of raw.profiles ?? []) this.profilesMap.set(p.playerId, p);
+      for (const p of raw.profiles ?? []) this.profilesMap.set(p.playerId, { ...emptyProfile(p.playerId, p.nickname), ...p });
       for (const m of raw.mixes ?? []) this.mixesMap.set(m.id, m);
+      for (const a of raw.accounts ?? []) this.accounts.set(a.usernameKey, a);
     } catch (e) {
       console.error('No se pudo leer', this.file, e);
     }
@@ -84,7 +97,7 @@ export class JsonStore implements Store {
       try {
         mkdirSync(dirname(this.file!), { recursive: true });
         const tmp = `${this.file}.tmp`;
-        writeFileSync(tmp, JSON.stringify({ profiles: [...this.profilesMap.values()], mixes: [...this.mixesMap.values()] }));
+        writeFileSync(tmp, JSON.stringify({ profiles: [...this.profilesMap.values()], mixes: [...this.mixesMap.values()], accounts: [...this.accounts.values()] }));
         renameSync(tmp, this.file!);
       } catch (e) {
         console.error('No se pudo guardar', this.file, e);
@@ -102,7 +115,22 @@ export class JsonStore implements Store {
     for (const o of outcomes) this.profilesMap.set(o.playerId, applyOutcome(this.profilesMap.get(o.playerId) ?? emptyProfile(o.playerId, o.nickname), o));
     this.persist();
   }
-  async leaderboard(limit: number) { return rankRows([...this.profilesMap.values()], limit); }
+  async recordRanked(outcomes: RankedOutcome[]) {
+    for (const o of outcomes) {
+      const p = this.profilesMap.get(o.playerId) ?? emptyProfile(o.playerId, '');
+      this.profilesMap.set(o.playerId, { ...p, mmr: o.mmr, rd: o.rd, vol: o.vol, rankedGames: p.rankedGames + 1, rankedWins: p.rankedWins + (o.won ? 1 : 0) });
+    }
+    this.persist();
+  }
+  async leaderboard(limit: number, by: 'wins' | 'mmr' = 'wins') { return rankRows([...this.profilesMap.values()], limit, by); }
+  async createAccount(a: Account) {
+    if (this.accounts.has(a.usernameKey)) return false;
+    this.accounts.set(a.usernameKey, a);
+    this.persist();
+    return true;
+  }
+  async account(key: string) { return this.accounts.get(key) ?? null; }
+  async accountOf(playerId: string) { return [...this.accounts.values()].find((a) => a.playerId === playerId) ?? null; }
   async mix(id: string) { return this.mixesMap.get(id) ?? null; }
   async mixesOf(owner: string) {
     return [...this.mixesMap.values()].filter((m) => m.owner === owner).map(summarize);
@@ -110,8 +138,8 @@ export class JsonStore implements Store {
   async saveMix(owner: string, ownerName: string, input: MixInput, id?: string) {
     const existing = id ? this.mixesMap.get(id) : undefined;
     if (existing && existing.owner !== owner) throw new Error('No puedes editar esta playlist.');
-    const base = { id: existing?.id ?? randomBytes(6).toString('base64url'), name: input.name, owner, ownerName, tracks: input.tracks };
-    const mix: Mix = { ...base, ...summarize({ ...base, count: 0, covers: [], artists: [] } as Mix), tracks: input.tracks };
+    const base = { id: existing?.id ?? randomBytes(6).toString('base64url'), name: input.name, owner, ownerName, tracks: input.tracks } as Mix;
+    const mix: Mix = { ...summarize(base), tracks: input.tracks };
     this.mixesMap.set(mix.id, mix);
     this.persist();
     return mix;
@@ -128,7 +156,7 @@ export class JsonStore implements Store {
   }
 }
 
-/** Postgres (DATABASE_URL). Crea las tablas si no existen. */
+/** Postgres (DATABASE_URL). Crea y actualiza las tablas al arrancar. */
 export class PgStore implements Store {
   kind = 'postgres' as const;
   private pool: import('pg').Pool | null = null;
@@ -137,7 +165,7 @@ export class PgStore implements Store {
 
   async init() {
     const { default: pg } = await import('pg');
-    const local = /localhost|127\.0\.0\.1|\/\/[^@]*@?\/var\/run/.test(this.url) || this.url.includes('sslmode=disable');
+    const local = /localhost|127\.0\.0\.1/.test(this.url) || this.url.includes('sslmode=disable');
     this.pool = new pg.Pool({ connectionString: this.url, max: 5, ssl: local ? undefined : { rejectUnauthorized: false } });
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS hc_profiles (
@@ -150,7 +178,13 @@ export class PgStore implements Store {
         best INTEGER NOT NULL DEFAULT 0,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+      ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS mmr INTEGER NOT NULL DEFAULT ${DEFAULT_RATING};
+      ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS rd DOUBLE PRECISION NOT NULL DEFAULT ${DEFAULT_RD};
+      ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS vol DOUBLE PRECISION NOT NULL DEFAULT ${DEFAULT_VOL};
+      ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS ranked_games INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS ranked_wins INTEGER NOT NULL DEFAULT 0;
       CREATE INDEX IF NOT EXISTS hc_profiles_rank ON hc_profiles (wins DESC, points DESC);
+      CREATE INDEX IF NOT EXISTS hc_profiles_mmr ON hc_profiles (mmr DESC) WHERE ranked_games > 0;
       CREATE TABLE IF NOT EXISTS hc_mixes (
         id TEXT PRIMARY KEY,
         owner TEXT NOT NULL,
@@ -160,6 +194,14 @@ export class PgStore implements Store {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS hc_mixes_owner ON hc_mixes (owner);
+      CREATE TABLE IF NOT EXISTS hc_accounts (
+        username_key TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        pass_hash TEXT NOT NULL,
+        player_id TEXT NOT NULL UNIQUE,
+        secret TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
     `);
   }
 
@@ -169,12 +211,19 @@ export class PgStore implements Store {
   }
 
   private static row(r: Record<string, unknown>): Profile {
-    return { playerId: String(r.player_id), nickname: String(r.nickname), points: Number(r.points), games: Number(r.games), wins: Number(r.wins), correct: Number(r.correct), best: Number(r.best) };
+    return {
+      playerId: String(r.player_id), nickname: String(r.nickname), points: Number(r.points), games: Number(r.games), wins: Number(r.wins),
+      correct: Number(r.correct), best: Number(r.best), mmr: Number(r.mmr), rd: Number(r.rd), vol: Number(r.vol),
+      rankedGames: Number(r.ranked_games), rankedWins: Number(r.ranked_wins),
+    };
   }
   private static mixRow(r: Record<string, unknown>): Mix {
     const tracks = r.tracks as MixTrack[];
     const base = { id: String(r.id), name: String(r.name), owner: String(r.owner), ownerName: String(r.owner_name), tracks } as Mix;
     return { ...summarize(base), tracks };
+  }
+  private static accRow(r: Record<string, unknown>): Account {
+    return { username: String(r.username), usernameKey: String(r.username_key), passHash: String(r.pass_hash), playerId: String(r.player_id), secret: String(r.secret), createdAt: new Date(String(r.created_at)).getTime() };
   }
 
   async profile(id: string) {
@@ -205,9 +254,40 @@ export class PgStore implements Store {
       );
     }
   }
-  async leaderboard(limit: number) {
-    const r = await this.db.query('SELECT * FROM hc_profiles WHERE games > 0 ORDER BY wins DESC, points DESC LIMIT $1', [limit]);
-    return rankRows(r.rows.map(PgStore.row), limit);
+  async recordRanked(outcomes: RankedOutcome[]) {
+    for (const o of outcomes) {
+      await this.db.query(
+        `INSERT INTO hc_profiles (player_id, nickname, mmr, rd, vol, ranked_games, ranked_wins)
+         VALUES ($1, '', $2, $3, $4, 1, $5)
+         ON CONFLICT (player_id) DO UPDATE SET
+           mmr = EXCLUDED.mmr, rd = EXCLUDED.rd, vol = EXCLUDED.vol,
+           ranked_games = hc_profiles.ranked_games + 1,
+           ranked_wins = hc_profiles.ranked_wins + EXCLUDED.ranked_wins,
+           updated_at = now()`,
+        [o.playerId, o.mmr, o.rd, o.vol, o.won ? 1 : 0],
+      );
+    }
+  }
+  async leaderboard(limit: number, by: 'wins' | 'mmr' = 'wins') {
+    const r = by === 'mmr'
+      ? await this.db.query('SELECT * FROM hc_profiles WHERE ranked_games > 0 ORDER BY mmr DESC, ranked_wins DESC LIMIT $1', [limit])
+      : await this.db.query('SELECT * FROM hc_profiles WHERE games > 0 ORDER BY wins DESC, points DESC LIMIT $1', [limit]);
+    return rankRows(r.rows.map(PgStore.row), limit, by);
+  }
+  async createAccount(a: Account) {
+    const r = await this.db.query(
+      'INSERT INTO hc_accounts (username_key, username, pass_hash, player_id, secret) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
+      [a.usernameKey, a.username, a.passHash, a.playerId, a.secret],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+  async account(key: string) {
+    const r = await this.db.query('SELECT * FROM hc_accounts WHERE username_key = $1', [key]);
+    return r.rows[0] ? PgStore.accRow(r.rows[0]) : null;
+  }
+  async accountOf(playerId: string) {
+    const r = await this.db.query('SELECT * FROM hc_accounts WHERE player_id = $1', [playerId]);
+    return r.rows[0] ? PgStore.accRow(r.rows[0]) : null;
   }
   async mix(id: string) {
     const r = await this.db.query('SELECT * FROM hc_mixes WHERE id = $1', [id]);
