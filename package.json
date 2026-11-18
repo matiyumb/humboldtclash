@@ -1,0 +1,41 @@
+{
+  "name": "humboldtclash",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trivia musical: escucha un fragmento y adivina el título. Solo o en salas de 2 a 5 jugadores.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:client": "vite",
+    "build": "vite build && tsc -p server/tsconfig.json",
+    "start": "node dist/server/src/index.js",
+    "generate-audio": "tsx scripts/generate-audio.ts",
+    "check-catalog": "tsx scripts/check-catalog.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "e2e": "node tests/e2e.mjs"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

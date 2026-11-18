@@ -1,0 +1,12 @@
+# Despliegue en Render (render.com) con un clic: New → Blueprint → elige este repositorio.
+services:
+  - type: web
+    name: humboldtclash
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

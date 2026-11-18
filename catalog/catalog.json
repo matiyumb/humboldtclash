@@ -1,0 +1,579 @@
+{
+  "$comment": "Fuente de verdad del catálogo. Ver GUIA-CANCIONES.md para añadir pistas.",
+  "tracks": [
+    {
+      "id": "luna-brava--fuego-lento",
+      "title": "Fuego Lento",
+      "artist": "Luna Brava",
+      "collection": "Verano Eterno",
+      "file": "luna-brava--fuego-lento.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 1000
+      }
+    },
+    {
+      "id": "luna-brava--corazon-de-neon",
+      "title": "Corazón de Neón",
+      "artist": "Luna Brava",
+      "collection": "Noche de Barrio",
+      "file": "luna-brava--corazon-de-neon.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 8919
+      }
+    },
+    {
+      "id": "luna-brava--bailando-en-la-azotea",
+      "title": "Bailando en la Azotea",
+      "artist": "Luna Brava",
+      "collection": "Sobremesa",
+      "file": "luna-brava--bailando-en-la-azotea.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 16838
+      }
+    },
+    {
+      "id": "luna-brava--mil-estrellas",
+      "title": "Mil Estrellas",
+      "artist": "Luna Brava",
+      "collection": "Verano Eterno",
+      "file": "luna-brava--mil-estrellas.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 24757
+      }
+    },
+    {
+      "id": "luna-brava--sin-mapa",
+      "title": "Sin Mapa",
+      "artist": "Luna Brava",
+      "collection": "Noche de Barrio",
+      "file": "luna-brava--sin-mapa.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 32676
+      }
+    },
+    {
+      "id": "luna-brava--agosto",
+      "title": "Agosto",
+      "artist": "Luna Brava",
+      "collection": "Sobremesa",
+      "file": "luna-brava--agosto.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 40595
+      }
+    },
+    {
+      "id": "luna-brava--tu-nombre-en-la-arena",
+      "title": "Tu Nombre en la Arena",
+      "artist": "Luna Brava",
+      "collection": "Verano Eterno",
+      "file": "luna-brava--tu-nombre-en-la-arena.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 48514
+      }
+    },
+    {
+      "id": "luna-brava--brillo-salvaje",
+      "title": "Brillo Salvaje",
+      "artist": "Luna Brava",
+      "collection": "Noche de Barrio",
+      "file": "luna-brava--brillo-salvaje.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 56433
+      }
+    },
+    {
+      "id": "luna-brava--medianoche-en-lima",
+      "title": "Medianoche en Lima",
+      "artist": "Luna Brava",
+      "collection": "Sobremesa",
+      "file": "luna-brava--medianoche-en-lima.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 64352
+      }
+    },
+    {
+      "id": "luna-brava--espejismo",
+      "title": "Espejismo",
+      "artist": "Luna Brava",
+      "collection": "Verano Eterno",
+      "file": "luna-brava--espejismo.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 72271
+      }
+    },
+    {
+      "id": "luna-brava--ola-rosa",
+      "title": "Ola Rosa",
+      "artist": "Luna Brava",
+      "collection": "Noche de Barrio",
+      "file": "luna-brava--ola-rosa.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 80190
+      }
+    },
+    {
+      "id": "luna-brava--vuelve-manana",
+      "title": "Vuelve Mañana",
+      "artist": "Luna Brava",
+      "collection": "Sobremesa",
+      "file": "luna-brava--vuelve-manana.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "pop",
+        "seed": 88109
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--cumbia-del-cometa",
+      "title": "Cumbia del Cometa",
+      "artist": "Los Cometas del Sur",
+      "collection": "Verano Eterno",
+      "file": "los-cometas-del-sur--cumbia-del-cometa.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 96028
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--la-pollera-azul",
+      "title": "La Pollera Azul",
+      "artist": "Los Cometas del Sur",
+      "collection": "Noche de Barrio",
+      "file": "los-cometas-del-sur--la-pollera-azul.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 103947
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--rio-arriba",
+      "title": "Río Arriba",
+      "artist": "Los Cometas del Sur",
+      "collection": "Sobremesa",
+      "file": "los-cometas-del-sur--rio-arriba.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 111866
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--guacamaya",
+      "title": "Guacamaya",
+      "artist": "Los Cometas del Sur",
+      "collection": "Verano Eterno",
+      "file": "los-cometas-del-sur--guacamaya.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 119785
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--el-tren-de-las-seis",
+      "title": "El Tren de las Seis",
+      "artist": "Los Cometas del Sur",
+      "collection": "Noche de Barrio",
+      "file": "los-cometas-del-sur--el-tren-de-las-seis.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 127704
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--sabor-a-mango",
+      "title": "Sabor a Mango",
+      "artist": "Los Cometas del Sur",
+      "collection": "Sobremesa",
+      "file": "los-cometas-del-sur--sabor-a-mango.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 135623
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--pasito-lunar",
+      "title": "Pasito Lunar",
+      "artist": "Los Cometas del Sur",
+      "collection": "Verano Eterno",
+      "file": "los-cometas-del-sur--pasito-lunar.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 143542
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--tamborito",
+      "title": "Tamborito",
+      "artist": "Los Cometas del Sur",
+      "collection": "Noche de Barrio",
+      "file": "los-cometas-del-sur--tamborito.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 151461
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--la-vecina",
+      "title": "La Vecina",
+      "artist": "Los Cometas del Sur",
+      "collection": "Sobremesa",
+      "file": "los-cometas-del-sur--la-vecina.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 159380
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--fiesta-en-el-puerto",
+      "title": "Fiesta en el Puerto",
+      "artist": "Los Cometas del Sur",
+      "collection": "Verano Eterno",
+      "file": "los-cometas-del-sur--fiesta-en-el-puerto.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 167299
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--marimba-dorada",
+      "title": "Marimba Dorada",
+      "artist": "Los Cometas del Sur",
+      "collection": "Noche de Barrio",
+      "file": "los-cometas-del-sur--marimba-dorada.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 175218
+      }
+    },
+    {
+      "id": "los-cometas-del-sur--domingo-de-feria",
+      "title": "Domingo de Feria",
+      "artist": "Los Cometas del Sur",
+      "collection": "Sobremesa",
+      "file": "los-cometas-del-sur--domingo-de-feria.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "cumbia",
+        "seed": 183137
+      }
+    },
+    {
+      "id": "trio-humboldt--corriente-fria",
+      "title": "Corriente Fría",
+      "artist": "Trío Humboldt",
+      "collection": "Verano Eterno",
+      "file": "trio-humboldt--corriente-fria.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 191056
+      }
+    },
+    {
+      "id": "trio-humboldt--bolero-del-faro",
+      "title": "Bolero del Faro",
+      "artist": "Trío Humboldt",
+      "collection": "Noche de Barrio",
+      "file": "trio-humboldt--bolero-del-faro.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 198975
+      }
+    },
+    {
+      "id": "trio-humboldt--neblina",
+      "title": "Neblina",
+      "artist": "Trío Humboldt",
+      "collection": "Sobremesa",
+      "file": "trio-humboldt--neblina.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 206894
+      }
+    },
+    {
+      "id": "trio-humboldt--carta-sin-sello",
+      "title": "Carta sin Sello",
+      "artist": "Trío Humboldt",
+      "collection": "Verano Eterno",
+      "file": "trio-humboldt--carta-sin-sello.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 214813
+      }
+    },
+    {
+      "id": "trio-humboldt--puerto-viejo",
+      "title": "Puerto Viejo",
+      "artist": "Trío Humboldt",
+      "collection": "Noche de Barrio",
+      "file": "trio-humboldt--puerto-viejo.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 222732
+      }
+    },
+    {
+      "id": "trio-humboldt--tus-ojos-de-sal",
+      "title": "Tus Ojos de Sal",
+      "artist": "Trío Humboldt",
+      "collection": "Sobremesa",
+      "file": "trio-humboldt--tus-ojos-de-sal.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 230651
+      }
+    },
+    {
+      "id": "trio-humboldt--serenata-austral",
+      "title": "Serenata Austral",
+      "artist": "Trío Humboldt",
+      "collection": "Verano Eterno",
+      "file": "trio-humboldt--serenata-austral.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 238570
+      }
+    },
+    {
+      "id": "trio-humboldt--cafe-de-las-cinco",
+      "title": "Café de las Cinco",
+      "artist": "Trío Humboldt",
+      "collection": "Noche de Barrio",
+      "file": "trio-humboldt--cafe-de-las-cinco.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 246489
+      }
+    },
+    {
+      "id": "trio-humboldt--luna-de-valparaiso",
+      "title": "Luna de Valparaíso",
+      "artist": "Trío Humboldt",
+      "collection": "Sobremesa",
+      "file": "trio-humboldt--luna-de-valparaiso.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 254408
+      }
+    },
+    {
+      "id": "trio-humboldt--panuelo-blanco",
+      "title": "Pañuelo Blanco",
+      "artist": "Trío Humboldt",
+      "collection": "Verano Eterno",
+      "file": "trio-humboldt--panuelo-blanco.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 262327
+      }
+    },
+    {
+      "id": "trio-humboldt--ultimo-vals",
+      "title": "Último Vals",
+      "artist": "Trío Humboldt",
+      "collection": "Noche de Barrio",
+      "file": "trio-humboldt--ultimo-vals.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "bolero",
+        "seed": 270246
+      }
+    },
+    {
+      "id": "marea-baja--ciudad-dormida",
+      "title": "Ciudad Dormida",
+      "artist": "Marea Baja",
+      "collection": "Sobremesa",
+      "file": "marea-baja--ciudad-dormida.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "synth",
+        "seed": 278165
+      }
+    },
+    {
+      "id": "marea-baja--pixel",
+      "title": "Píxel",
+      "artist": "Marea Baja",
+      "collection": "Verano Eterno",
+      "file": "marea-baja--pixel.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "synth",
+        "seed": 286084
+      }
+    },
+    {
+      "id": "marea-baja--autopista",
+      "title": "Autopista",
+      "artist": "Marea Baja",
+      "collection": "Noche de Barrio",
+      "file": "marea-baja--autopista.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "synth",
+        "seed": 294003
+      }
+    },
+    {
+      "id": "marea-baja--ecos",
+      "title": "Ecos",
+      "artist": "Marea Baja",
+      "collection": "Sobremesa",
+      "file": "marea-baja--ecos.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "synth",
+        "seed": 301922
+      }
+    },
+    {
+      "id": "marea-baja--satelite",
+      "title": "Satélite",
+      "artist": "Marea Baja",
+      "collection": "Verano Eterno",
+      "file": "marea-baja--satelite.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "synth",
+        "seed": 309841
+      }
+    },
+    {
+      "id": "marea-baja--bruma-digital",
+      "title": "Bruma Digital",
+      "artist": "Marea Baja",
+      "collection": "Noche de Barrio",
+      "file": "marea-baja--bruma-digital.mp3",
+      "origin": "Composición original generada por código para Humboldtclash (scripts/generate-audio.ts)",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "generator": {
+        "style": "synth",
+        "seed": 317760
+      }
+    }
+  ]
+}
