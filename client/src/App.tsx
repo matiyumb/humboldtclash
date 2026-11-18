@@ -8,7 +8,8 @@ import { Setup } from './screens/Setup';
 import { Lobby } from './screens/Lobby';
 import { Game } from './screens/Game';
 import { Results } from './screens/Results';
-import { Banner, Logo } from './ui';
+import { Intro } from './screens/Intro';
+import { Banner, Logo, MuteButton } from './ui';
 
 type View = { name: 'home' } | { name: 'setup'; initial: CatalogSummary | null } | { name: 'room' };
 
@@ -81,6 +82,7 @@ export function App() {
     const onState = (s: RoomState) => {
       if (roomCode.current && s.code !== roomCode.current) return;
       if (s.round) noteServerTime(s.round.serverNow);
+      else if (s.intro) noteServerTime(s.intro.serverNow);
       setRoom(s);
     };
     const onReplaced = () => { setReplaced(true); forgetClip(); };
@@ -159,7 +161,7 @@ export function App() {
   } else if (view.name === 'room') {
     if (!room) body = <section className="panel center"><p className="muted">Conectando con la sala…</p></section>;
     else if (room.phase === 'lobby') body = <Lobby room={room} catalogs={catalogs} onLeave={leave} />;
-    else if (room.phase === 'playing') body = <Game room={room} onLeave={leave} />;
+    else if (room.phase === 'playing') body = room.round ? <Game room={room} onLeave={leave} /> : <Intro room={room} />;
     else body = <Results room={room} onHome={leave} />;
   } else if (view.name === 'setup') {
     body = (
@@ -193,8 +195,10 @@ export function App() {
   }
 
   const inGame = view.name === 'room' && room?.phase === 'playing';
+  const screenKey = replaced ? 'replaced' : view.name === 'room' ? `room-${room?.phase ?? 'wait'}-${room?.round ? 'g' : 'i'}` : view.name;
   return (
     <div className="app">
+      <MuteButton />
       {!inGame && view.name !== 'home' && (
         <header className="topbar">
           <Logo small />
@@ -210,7 +214,7 @@ export function App() {
             </Banner>
           </div>
         )}
-        {body}
+        <div className="screen" key={screenKey}>{body}</div>
       </main>
     </div>
   );

@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ROUND_MS, type RoomState } from '../../../shared/types';
 import { call, serverNow, socket } from '../net';
 import { loadClip, onAudioStatus, playClip, stopClip, unlockAudio, type AudioStatus } from '../audio';
-import { Banner, Icon, Waveform } from '../ui';
+import { sfx } from '../sfx';
+import { Banner, CountUp, Cover, Icon, Waveform } from '../ui';
+
+const RING = 2 * Math.PI * 26;
 
 const MAX_ATTEMPTS = 3;
 type LoadState = 'loading' | 'ready' | 'failed' | 'replacing';
@@ -75,8 +78,33 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
   const remainingMs = round.phase === 'loading' ? ROUND_MS : round.deadline ? Math.min(ROUND_MS, Math.max(0, round.deadline - now)) : 0;
   const secondsLeft = Math.ceil(remainingMs / 1000);
 
+  // Sonidos: inicio de ronda, tic-tac de los últimos 5 s y resultado.
+  const lastTick = useRef<number | null>(null);
+  useEffect(() => {
+    if (round.phase === 'answering') sfx.roundStart();
+    lastTick.current = null;
+  }, [round.phase, q]);
+  useEffect(() => {
+    if (round.phase !== 'answering' || answered) return;
+    if (secondsLeft >= 1 && secondsLeft <= 5 && lastTick.current !== secondsLeft) {
+      lastTick.current = secondsLeft;
+      sfx.tick(secondsLeft <= 3);
+    }
+  }, [secondsLeft, round.phase, answered]);
+  const revealedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (round.phase !== 'reveal' || !round.reveal || revealedFor.current === q) return;
+    revealedFor.current = q;
+    const mine = round.reveal.results.find((r) => r.playerId === room.you);
+    if (round.reveal.voided) sfx.timeout();
+    else if (mine?.correct) sfx.correct();
+    else if (mine?.timedOut) sfx.timeout();
+    else sfx.wrong();
+  }, [round.phase, round.reveal, q, room.you]);
+
   const choose = useCallback(async (optionId: string) => {
     if (round.phase !== 'answering' || answered) return;
+    sfx.pick();
     setPending(optionId);
     const r = await call('round:answer', { questionId: q, optionId });
     if (!r.ok) {
@@ -112,17 +140,20 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
           <span className="hud__label">Ronda</span>
           <span className="hud__value">{round.index}<small>/{round.total}</small></span>
         </div>
-        <div className={`timer ${secondsLeft <= 3 && round.phase === 'answering' ? 'is-low' : ''}`} role="timer" aria-label={`${secondsLeft} segundos restantes`}>
-          <span className="timer__num">{round.phase === 'loading' ? '10' : secondsLeft}</span>
-          <span className="timer__bar"><span style={{ width: `${(remainingMs / ROUND_MS) * 100}%` }} /></span>
+        <div className={`timer ${secondsLeft <= 3 && round.phase === 'answering' ? 'is-low' : ''} ${round.phase === 'answering' ? 'is-running' : ''}`} role="timer" aria-label={`${secondsLeft} segundos restantes`}>
+          <svg className="timer__ring" viewBox="0 0 60 60" aria-hidden="true">
+            <circle cx="30" cy="30" r="26" className="timer__track" />
+            <circle cx="30" cy="30" r="26" className="timer__fill" style={{ strokeDasharray: RING, strokeDashoffset: RING * (1 - remainingMs / ROUND_MS) }} />
+          </svg>
+          <span className="timer__num" key={secondsLeft}>{round.phase === 'loading' ? '10' : secondsLeft}</span>
         </div>
         <div className="hud__item hud__item--right">
           <span className="hud__label">Puntos</span>
-          <span className="hud__value">{me.score.toLocaleString('es')}</span>
+          <span className="hud__value" data-value={me.score}><CountUp value={me.score} /></span>
         </div>
       </header>
 
-      <div className="stage">
+      <div className="stage" key={`stage-${round.index}`}>
         <Waveform bars={56} seed={round.index * 13} active={audio === 'playing' && round.phase === 'answering'} className="stage__wave" />
         <div className="stage__status" aria-live="polite">
           {round.phase === 'loading' && load === 'loading' && <p>{attempt > 1 ? `Reintentando (${attempt}/${MAX_ATTEMPTS})…` : multi ? 'Cargando audio para todos…' : 'Preparando la ronda…'}</p>}
@@ -149,8 +180,8 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
         </div>
       </div>
 
-      <div className="answers" role="group" aria-label="Opciones de respuesta">
-        {(round.options.length ? round.options : Array.from({ length: 4 }, (_, i) => ({ id: `ph${i}`, title: '' }))).map((o, i) => {
+      <div className={`answers ${round.options.length ? 'is-live' : ''}`} role="group" aria-label="Opciones de respuesta" key={round.options.length ? q : 'ph'}>
+        {(round.options.length ? round.options : Array.from({ length: 4 }, (_, i) => ({ id: `ph${i}`, title: '', cover: null }))).map((o, i) => {
           const isMine = answered === o.id;
           const isCorrect = reveal?.correctOptionId === o.id;
           let state = '';
@@ -172,7 +203,9 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
               aria-disabled={disabled}
               onClick={() => choose(o.id)}
               aria-keyshortcuts={String(i + 1)}
+              style={{ ['--i' as string]: i }}
             >
+              {o.title ? <Cover src={o.cover} title={o.title} className="answer__cover" /> : <span className="cover cover--skeleton answer__cover" />}
               <span className="answer__key" aria-hidden="true">{i + 1}</span>
               <span className="answer__title">{o.title || ' '}</span>
               {badge}
@@ -188,7 +221,7 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
             return (
               <li key={p.id} className={`chip ${p.connected ? '' : 'is-off'} ${p.id === room.you ? 'is-me' : ''}`}>
                 <span className="chip__name">{p.nickname}{p.isHost ? ' ♛' : ''}</span>
-                <span className="chip__score">{p.score.toLocaleString('es')}</span>
+                <span className="chip__score"><CountUp value={p.score} /></span>
                 {round.phase === 'answering' && <span className="chip__state">{p.answered ? '✓ respondió' : p.connected ? '…' : 'sin conexión'}</span>}
                 {round.phase === 'reveal' && r && <span className="chip__state">{r.correct ? `+${r.points}` : r.timedOut ? '⏱ 0' : '✗ 0'}</span>}
               </li>

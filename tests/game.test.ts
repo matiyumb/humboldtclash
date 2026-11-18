@@ -3,7 +3,7 @@ import { Catalog } from '../server/src/catalog';
 import { Deezer } from '../server/src/deezer';
 import { Library } from '../server/src/library';
 import { GameManager, rankStandings, LOAD_TIMEOUT_MS } from '../server/src/game';
-import { scoreFor, ROUND_MS, REVEAL_PAUSE_MS, type RoomState } from '../shared/types';
+import { scoreFor, ROUND_MS, REVEAL_PAUSE_MS, INTRO_MS, type RoomState } from '../shared/types';
 
 const catalog = new Catalog(process.cwd());
 
@@ -71,6 +71,7 @@ describe('partidas', () => {
   it('solitario: 10 rondas, revelación al responder, una respuesta por ronda', async () => {
     const { gm, last } = setup();
     const r = await gm.createRoom('s1', id('a'), 'Ana', 'solo', 'artista:luna-brava');
+    vi.advanceTimersByTime(INTRO_MS); // cuenta atrás inicial
     expect(r.ok).toBe(true);
     const code = (r as any).code;
     for (let i = 1; i <= 10; i++) {
@@ -106,6 +107,7 @@ describe('partidas', () => {
   it('el servidor rechaza respuestas fuera de plazo y el tiempo agotado vale 0', async () => {
     const { gm, last } = setup();
     await gm.createRoom('s1', id('a'), 'Ana', 'solo', 'todo');
+    vi.advanceTimersByTime(INTRO_MS); // cuenta atrás inicial
     const q = last.get('s1')!.round!.questionId;
     gm.ready('s1', q);
     vi.advanceTimersByTime(ROUND_MS + 31);
@@ -130,6 +132,8 @@ describe('partidas', () => {
     expect(gm.joinRoom('p6', code, id('6'), 'J6')).toEqual({ ok: false, error: 'La sala está llena (máximo 5 jugadores).' });
     for (const n of ['3', '4', '5']) gm.leave(`p${n}`);
     expect((await gm.start('h')).ok).toBe(true);
+    expect(last.get('g')!.intro).not.toBeNull(); // todos ven la cuenta atrás
+    vi.advanceTimersByTime(INTRO_MS);
     expect(gm.joinRoom('late', code, id('late'), 'Tarde')).toEqual({ ok: false, error: 'La partida ya empezó: no se pueden unir más jugadores.' });
 
     // Misma pregunta y misma hora límite para todos.
@@ -163,6 +167,7 @@ describe('partidas', () => {
   it('si el audio falla se sustituye la canción antes de iniciar el temporizador', async () => {
     const { gm, last } = setup();
     await gm.createRoom('s1', id('a'), 'Ana', 'solo', 'todo');
+    vi.advanceTimersByTime(INTRO_MS); // cuenta atrás inicial
     const first = last.get('s1')!.round!;
     gm.audioFailed('s1', first.questionId);
     const second = last.get('s1')!.round!;
@@ -181,6 +186,7 @@ describe('partidas', () => {
     const code = ((await gm.createRoom('a', id('a'), 'Ana', 'multi', 'todo')) as any).code;
     gm.joinRoom('b', code, id('b'), 'Beto');
     await gm.start('a');
+    vi.advanceTimersByTime(INTRO_MS);
     for (let i = 0; i < 10; i++) {
       const q = last.get('a')!.round!.questionId;
       gm.ready('a', q); gm.ready('b', q);
@@ -220,6 +226,7 @@ describe('Deezer', () => {
   it('partida en solitario con Deezer: audio opaco y enlace a Deezer al revelar', async () => {
     const { gm, last } = setup();
     const r = await gm.createRoom('s1', id('a'), 'Ana', 'solo', 'deezer:artist:10583405');
+    vi.advanceTimersByTime(INTRO_MS); // cuenta atrás inicial
     expect(r.ok).toBe(true);
     const code = (r as any).code;
     let st = last.get('s1')!;

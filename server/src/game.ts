@@ -1,7 +1,7 @@
 import { randomBytes, createHash, timingSafeEqual, randomInt } from 'node:crypto';
 import { extname } from 'node:path';
 import {
-  MAX_PLAYERS, MIN_PLAYERS_MULTI, MIN_TRACKS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUNDS_PER_GAME, ROUND_MS,
+  MAX_PLAYERS, MIN_PLAYERS_MULTI, MIN_TRACKS, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUNDS_PER_GAME, ROUND_MS,
   scoreFor,
   type Ack, type Identity, type MissedSong, type PlayerView, type RevealView, type RoomState, type RoundResult, type StandingRow,
 } from '../../shared/types.js';
@@ -36,7 +36,7 @@ interface Round {
   index: number;
   questionId: string;
   track: Track;
-  options: { id: string; title: string }[];
+  options: { id: string; title: string; cover: string | null }[];
   correctOptionId: string;
   token: string;
   phase: 'loading' | 'answering' | 'reveal';
@@ -66,6 +66,7 @@ interface Room {
   isPublic: boolean;
   catalogName: string | null;
   starting: boolean; // evita doble inicio mientras se cargan canciones de Deezer
+  introUntil: number | null;
 }
 
 export type AudioTicket = { code: string; type: string } & (
@@ -181,7 +182,7 @@ export class GameManager {
       code, mode, phase: 'lobby', hostId: player.id, players: [player],
       catalogId: typeof catalogId === 'string' ? catalogId : null,
       deck: [], pool: [], used: new Set(), round: null, history: [],
-      isPublic: mode === 'multi' && isPublic === true, catalogName, starting: false,
+      isPublic: mode === "multi" && isPublic === true, catalogName, starting: false, introUntil: null,
     };
     this.rooms.set(code, room);
     this.sockets.set(socketId, { code, playerId: player.id });
@@ -445,7 +446,10 @@ export class GameManager {
     // Quien no está conectado al empezar no juega.
     room.players = room.players.filter((p) => p.connected && !p.left);
     room.round = null;
-    this.nextRound(room);
+    // Cuenta atrás común «3, 2, 1» antes de la primera ronda.
+    room.introUntil = Date.now() + INTRO_MS;
+    this.setTimer(room, INTRO_MS, () => { room.introUntil = null; this.nextRound(room); });
+    this.broadcast(room);
     return { ok: true };
   }
 
@@ -468,7 +472,7 @@ export class GameManager {
     if (room.round) this.tickets.delete(room.round.token);
     const distractors = shuffle(room.pool.filter((t) => t.title.toLowerCase() !== track.title.toLowerCase()))
       .slice(0, OPTIONS_PER_QUESTION - 1);
-    const options = shuffle([track, ...distractors]).map((t) => ({ id: opaque(), title: t.title, isCorrect: t.id === track.id }));
+    const options = shuffle([track, ...distractors]).map((t) => ({ id: opaque(), title: t.title, cover: t.cover ?? null, isCorrect: t.id === track.id }));
     const token = opaque(18);
     if (track.file) {
       const path = this.library.local.audioPath(track);
@@ -479,7 +483,7 @@ export class GameManager {
     room.round = {
       index, track, token, replacements,
       questionId: opaque(),
-      options: options.map(({ id, title }) => ({ id, title })),
+      options: options.map(({ id, title, cover }) => ({ id, title, cover })),
       correctOptionId: options.find((o) => o.isCorrect)!.id,
       phase: 'loading', ready: new Set(), deadline: null, answers: new Map(), reveal: null,
     };
@@ -599,6 +603,7 @@ export class GameManager {
       code: room.code, mode: room.mode, phase: room.phase, you: me.id, hostId: room.hostId, players,
       catalog: room.catalogId ? { id: room.catalogId, name: room.catalogName ?? room.catalogId } : null,
       isPublic: room.isPublic,
+      intro: room.phase === "playing" && !room.round && room.introUntil ? { startsAt: room.introUntil, serverNow: Date.now() } : null,
       round: roundView, results, maxPlayers: MAX_PLAYERS, minPlayers: MIN_PLAYERS_MULTI,
     };
   }

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CatalogSummary, RoomState } from '../../../shared/types';
 import { call } from '../net';
 import { isUnlocked, unlockAudio } from '../audio';
+import { sfx } from '../sfx';
 import { Banner, Icon, Waveform } from '../ui';
 import { CatalogPicker, type Catalogs } from './CatalogPicker';
 
@@ -16,6 +17,13 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
   const active = room.players.filter((p) => !p.left);
   const connected = active.filter((p) => p.connected).length;
   const canStart = isHost && connected >= room.minPlayers && !!room.catalog && !picking;
+
+  const count = active.length;
+  const prevCount = useRef(count);
+  useEffect(() => {
+    if (count > prevCount.current) sfx.join();
+    prevCount.current = count;
+  }, [count]);
 
   useEffect(() => {
     const t = setInterval(() => setSoundOn(isUnlocked()), 800);

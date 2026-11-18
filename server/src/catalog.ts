@@ -18,6 +18,8 @@ export interface Track {
   licenseUrl?: string;
   /** Pistas de Deezer: id para renovar la URL de vista previa cuando caduca. */
   deezerId?: number;
+  /** Portada del álbum (URL https). */
+  cover?: string;
 }
 
 const titleKey = (t: string) =>

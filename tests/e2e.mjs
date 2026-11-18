@@ -136,7 +136,7 @@ log('\n▶ Partida en solitario (escritorio)');
       await page.screenshot({ path: `${SHOTS}/03-revelacion.png` });
     }
     total += pts;
-    const shown = Number((await page.textContent('.hud__item--right .hud__value')).replace(/\D/g, ''));
+    const shown = Number(await page.getAttribute('.hud__item--right .hud__value', 'data-value'));
     check(shown === total, `marcador acumulado ${shown} = ${total}`);
     if (r === 4) {
       // Ronda 5: el audio falla siempre → 3 intentos → el servidor sustituye la canción.
@@ -152,7 +152,7 @@ log('\n▶ Partida en solitario (escritorio)');
   }
   await page.waitForSelector('.score-big', { timeout: 8000 });
   await page.screenshot({ path: `${SHOTS}/04-resultado-solo.png`, fullPage: true });
-  const final = Number((await page.textContent('.score-big')).replace(/\D/g, ''));
+  const final = Number(await page.getAttribute('.score-big', 'data-value'));
   check(final === total, `resultado final ${final} puntos`);
   check((await page.textContent('.results__hits')).includes(`${correctCount} aciertos de 10`), `${correctCount} aciertos de 10`);
   check((await page.$$('.missed li')).length === 10 - correctCount, 'lista de canciones falladas');
@@ -188,6 +188,9 @@ log('\n▶ Partida en solitario con Deezer (Omar Courtz)');
   const audioReqs = [];
   page.on('request', (r) => { if (r.url().includes('/api/audio/')) audioReqs.push(r.url()); });
   await page.click('button:has-text("Empezar partida")');
+  await page.waitForSelector('.intro__num', { timeout: 8000 });
+  check(true, 'cuenta atrás «3, 2, 1» antes de la primera ronda');
+  await page.screenshot({ path: `${SHOTS}/11-cuenta-atras.png` });
   await page.waitForSelector('.hud', { timeout: 15000 });
   const code = await page.evaluate(() => localStorage.getItem('hc.room'));
   for (let r = 1; r <= 3; r++) {
@@ -195,6 +198,11 @@ log('\n▶ Partida en solitario con Deezer (Omar Courtz)');
     const sol = await answer(code);
     const titles = await optionTitles(page);
     check(titles.includes(sol.title), `ronda ${r}: suena la vista previa y aparecen 4 títulos («${sol.title}»)`);
+    if (r === 1) {
+      await page.waitForFunction(() => [...document.querySelectorAll('.answer img.answer__cover')].filter((i) => i.complete && i.naturalWidth > 0).length === 4, null, { timeout: 5000 }).catch(() => {});
+      check((await page.$$('.answer img.answer__cover')).length === 4, 'cada opción muestra la portada del álbum');
+      await page.screenshot({ path: `${SHOTS}/12-portadas.png` });
+    }
     await page.click(`.answer:has-text("${sol.title}")`);
     await waitReveal(page);
     const href = await page.getAttribute('.verdict a', 'href');
@@ -301,11 +309,11 @@ log('\n▶ Partida multijugador (escritorio + móvil)');
 
   // Ronda 3: el invitado recarga la página y recupera su puesto.
   await waitAnswering(guest);
-  const scoreBefore = await guest.textContent('.hud__item--right .hud__value');
+  const scoreBefore = await guest.getAttribute('.hud__item--right .hud__value', 'data-value');
   await guest.reload();
   await waitAnswering(guest, 15000).catch(() => {});
   await guest.waitForSelector('.hud');
-  check((await guest.textContent('.hud__item--right .hud__value')) === scoreBefore, `reconexión: conserva su puntaje (${scoreBefore})`);
+  check((await guest.getAttribute('.hud__item--right .hud__value', 'data-value')) === scoreBefore, `reconexión: conserva su puntaje (${scoreBefore})`);
   sol = await answer(code);
   if (sol.phase === 'answering') {
     await guest.click(`.answer:has-text("${sol.title}")`).catch(() => {});

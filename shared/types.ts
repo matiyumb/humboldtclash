@@ -8,6 +8,7 @@ export const MIN_TRACKS = 10;
 export const MAX_PLAYERS = 5;
 export const MIN_PLAYERS_MULTI = 2;
 export const OPTIONS_PER_QUESTION = 4;
+export const INTRO_MS = 3_500; // cuenta atrás «3, 2, 1» antes de la primera ronda
 
 export function scoreFor(correct: boolean, remainingMs: number): number {
   if (!correct) return 0;
@@ -58,6 +59,7 @@ export interface PlayerView {
 export interface OptionView {
   id: string; // opaco, distinto en cada pregunta
   title: string;
+  cover: string | null; // portada del álbum (si la hay)
 }
 
 export interface RoundResult {
@@ -123,6 +125,7 @@ export interface RoomState {
   players: PlayerView[];
   catalog: { id: string; name: string } | null;
   round: RoundView | null;
+  intro: { startsAt: number; serverNow: number } | null; // cuenta atrás de inicio
   results: ResultsView | null;
   maxPlayers: number;
   minPlayers: number;

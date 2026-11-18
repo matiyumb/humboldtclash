@@ -12,7 +12,7 @@ export interface DeezerTrackRaw {
   link?: string;
   readable?: boolean;
   artist?: { id: number; name: string };
-  album?: { title?: string; cover_medium?: string };
+  album?: { title?: string; cover?: string; cover_medium?: string };
 }
 
 export class DeezerError extends Error {}
@@ -32,6 +32,7 @@ export function deezerToTrack(d: DeezerTrackRaw, collection: string): Track | nu
     collection,
     previewUrl: d.preview,
     storeUrl: d.link ?? `https://www.deezer.com/track/${d.id}`,
+    cover: d.album?.cover_medium || d.album?.cover || undefined,
     origin: ORIGIN,
     license: LICENSE,
   };

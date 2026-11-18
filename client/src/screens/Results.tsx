@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RoomState } from '../../../shared/types';
 import { call } from '../net';
 import { unlockAudio } from '../audio';
-import { Banner, Icon, Waveform } from '../ui';
+import { sfx } from '../sfx';
+import { Banner, Confetti, CountUp, Icon, Waveform } from '../ui';
 
 const REASON = {
   wrong: { icon: Icon.cross, text: 'Fallaste' },
@@ -15,6 +16,8 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
   const isHost = room.hostId === room.you;
   const [error, setError] = useState<string | null>(null);
   const mine = r.standings.find((s) => s.playerId === room.you);
+  const celebrate = room.mode === 'solo' ? (mine?.correct ?? 0) >= 7 : mine?.position === 1;
+  useEffect(() => { sfx.fanfare(); }, []);
 
   const again = async () => {
     unlockAudio();
@@ -24,11 +27,12 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
 
   return (
     <section className="results">
-      <Waveform bars={40} seed={5} className="results__wave" />
+      {celebrate && <Confetti />}
+      <Waveform bars={40} seed={5} active className="results__wave" />
       {room.mode === 'solo' ? (
         <>
           <p className="eyebrow">Resultado · {room.catalog?.name}</p>
-          <h1 className="score-big">{mine?.score.toLocaleString('es') ?? 0}<small> puntos</small></h1>
+          <h1 className="score-big" data-value={mine?.score ?? 0}><CountUp value={mine?.score ?? 0} from={0} ms={1400} /><small> puntos</small></h1>
           <p className="results__hits"><b>{mine?.correct ?? 0}</b> aciertos de {r.totalRounds}</p>
           {r.missed.length > 0 ? (
             <div className="panel">
@@ -57,8 +61,8 @@ export function Results({ room, onHome }: { room: RoomState; onHome: () => void 
                 <tr><th scope="col">Pos.</th><th scope="col">Apodo</th><th scope="col" className="num">Puntaje</th><th scope="col" className="num">Aciertos</th></tr>
               </thead>
               <tbody>
-                {r.standings.map((s) => (
-                  <tr key={s.playerId} className={s.playerId === room.you ? 'is-me' : ''}>
+                {r.standings.map((s, i) => (
+                  <tr key={s.playerId} className={s.playerId === room.you ? 'is-me' : ''} style={{ ['--i' as string]: i }}>
                     <td><span className={`pos pos--${s.position}`}>{s.position}º</span></td>
                     <td>{s.nickname}{s.playerId === room.you && <span className="tag">tú</span>}{s.left && <span className="tag tag--off">se fue</span>}</td>
                     <td className="num">{s.score.toLocaleString('es')}</td>

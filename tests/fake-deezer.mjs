@@ -25,7 +25,7 @@ const toApi = (t, fresh = false) => ({
   id: t.id, title: t.title, title_short: t.title, readable: true,
   preview: `${BASE}/preview/${t.id}.mp3${t.id === EXPIRED && !fresh ? '?hdnea=exp=1' : '?hdnea=ok'}`,
   link: `https://www.deezer.com/track/${t.id}`,
-  artist: t.artist, album: { title: 'Álbum' },
+  artist: t.artist, album: { title: 'Álbum', cover_medium: `${BASE}/cover/${t.id}.svg` },
 });
 
 const json = (res, data, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
@@ -47,6 +47,11 @@ createServer((req, res) => {
   if ((m = p.match(/^\/track\/(\d+)$/))) {
     const t = tracks.find((x) => x.id === Number(m[1]));
     return t ? json(res, toApi(t, true)) : json(res, { error: { type: 'DataException', message: 'no data', code: 800 } });
+  }
+  if ((m = p.match(/^\/cover\/(\d+)\.svg$/))) {
+    const id = Number(m[1]); const h = (id * 47) % 360;
+    res.writeHead(200, { 'content-type': 'image/svg+xml' });
+    return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h},70%,55%)"/><stop offset="1" stop-color="hsl(${(h + 60) % 360},70%,35%)"/></linearGradient></defs><rect width="100" height="100" fill="url(#g)"/><circle cx="50" cy="50" r="22" fill="rgba(0,0,0,.35)"/><circle cx="50" cy="50" r="6" fill="#fff"/></svg>`);
   }
   if ((m = p.match(/^\/preview\/(\d+)\.mp3$/))) {
     if (url.searchParams.get('hdnea') !== 'ok') { res.writeHead(403); return res.end('expired'); }
