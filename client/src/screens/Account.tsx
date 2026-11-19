@@ -129,7 +129,7 @@ function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (va
       <PasswordField key={passwordAutocomplete} name="password" autoComplete={passwordAutocomplete} />
       {registering && <PasswordField name="confirmation" autoComplete="new-password" />}
       {error && <Banner>{error}</Banner>}
-      <button type="submit" className="btn btn--primary btn--block" disabled={busy}>{registering ? 'Enviar código' : 'Entrar'}</button>
+      <button type="submit" className="btn btn--primary btn--block" disabled={busy}>{registering ? 'Registrarse' : 'Entrar'}</button>
     </form>
   );
 }

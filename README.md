@@ -103,7 +103,7 @@ Para activarlos, arranca con `ADS=1` (y opcionalmente `ADS_CLIENT=<id del provee
 | `ADS=1`, `ADS_CLIENT` | Activa los huecos de publicidad |
 | `CATALOG_DIR` | Carpeta con `catalog/` y `audio/` para canciones propias |
 
-Para activar el registro en producción, configura ambas variables de correo en Render. Las cuentas existentes pueden iniciar sesión aunque el correo no esté configurado. Un código caduca en 10 minutos, tras cinco intentos incorrectos o al reiniciarse el servidor. En cualquiera de esos casos se puede volver al registro y solicitar otro.
+Para activar el registro en producción, verifica el dominio del remitente en Resend y crea una clave con permiso de envío. En Render, abre el servicio `humboldtclash` → **Environment**, añade `RESEND_API_KEY` y `VERIFICATION_FROM_EMAIL`, y guarda con **Save and deploy**. En los servicios ya creados, añade los valores desde el panel aunque figuren en `render.yaml`. Si falta alguno, el registro queda deshabilitado y el log de arranque indica qué variable falta. Las cuentas existentes pueden iniciar sesión aunque el correo no esté configurado. Un código caduca en 10 minutos, tras cinco intentos incorrectos o al reiniciarse el servidor. En cualquiera de esos casos se puede volver al registro y solicitar otro.
 
 ## ¿Por qué Deezer y no Spotify?
 

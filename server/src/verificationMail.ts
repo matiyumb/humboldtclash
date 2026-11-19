@@ -4,7 +4,11 @@ export function verificationMailer(env: NodeJS.ProcessEnv) {
   const testOrigin = env.HUMBOLDTCLASH_TEST === '1' && /^http:\/\/127\.0\.0\.1:\d+$/.test(env.TEST_MAIL_ORIGIN ?? '')
     ? env.TEST_MAIL_ORIGIN
     : undefined;
-  if (!testOrigin && (!key || !from)) return null;
+  if (!testOrigin && (!key || !from)) {
+    const missing = [!key && 'RESEND_API_KEY', !from && 'VERIFICATION_FROM_EMAIL'].filter(Boolean);
+    console.warn(`Registro por correo desactivado. Variables de entorno sin configurar: ${missing.join(', ')}.`);
+    return null;
+  }
 
   return async (address: string, code: string) => {
     const response = await fetch(testOrigin ? new URL('/emails', testOrigin) : 'https://api.resend.com/emails', {
