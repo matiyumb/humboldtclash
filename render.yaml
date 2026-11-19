@@ -14,3 +14,8 @@ services:
       # Render te pedirá el valor: pega la «connection string» de Neon (postgres://...).
       - key: DATABASE_URL
         sync: false
+      # Clave de envío de Resend y remitente de un dominio verificado en Resend.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: VERIFICATION_FROM_EMAIL
+        sync: false
