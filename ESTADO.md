@@ -8,6 +8,9 @@
 - Dificultad afinada con Last.fm (oyentes) si hay `LASTFM_API_KEY`; sin clave, usa el «rank» de Deezer (`server/src/lastfm.ts`).
 - Ajustes: 5–20 canciones, dificultad (general/mainstream/fan/nicho), fragmento 1–5 s o completo, instrumental, orden aleatorio.
 - Puntos 0–10 por canción; easter egg «oído biónico» (≤ 0,4 s); rangos por victorias multijugador (Rookie 50, Conocedor 100, Fan 500, Melófano 5000).
+- Victoria solo para el 1.º en solitario; empate en cabeza = ni victoria ni derrota (competitivo: contador `rankedDraws`).
+- Salas: el anfitrión expulsa jugadores (no pueden volver); chat en sala de espera, partida y resultados (retenido durante la ronda hasta la revelación).
+- Una canción que ya sonó no vuelve a salir ni como opción falsa (`pickDistractors` en `game.ts`); «Jugar otra vez» prioriza canciones nuevas.
 - Cuentas (usuario + contraseña), perfiles, ranking, playlists propias, modo oscuro, volumen, sonidos, emblema propio (sin logo del colegio).
 - Huecos de anuncios reservados (apagados, `ADS=1`). CI en GitHub Actions. Publicado en Render desde `main`.
 

@@ -6,9 +6,10 @@ import { sfx } from '../sfx';
 import { Banner, Icon, RankBadge, Waveform } from '../ui';
 import { CatalogPicker, type Catalogs } from './CatalogPicker';
 import { SettingsForm } from './SettingsForm';
-import type { GameSettings } from '../../../shared/types';
+import type { ChatMessage, GameSettings } from '../../../shared/types';
+import { Chat } from './Chat';
 
-export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: Catalogs | null; onLeave: () => void }) {
+export function Lobby({ room, catalogs, chat, onLeave }: { room: RoomState; catalogs: Catalogs | null; chat: ChatMessage[]; onLeave: () => void }) {
   const isHost = room.hostId === room.you;
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -70,6 +71,12 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
     if (!r.ok) setError(r.error);
   };
 
+  const kick = async (playerId: string, nickname: string) => {
+    if (!confirm(`¿Expulsar a ${nickname}? No podrá volver a entrar en esta sala.`)) return;
+    const r = await call('room:kick', { playerId });
+    setError(r.ok ? null : r.error);
+  };
+
   const start = async () => {
     unlockAudio();
     const r = await call('room:start', {}, 15000);
@@ -106,6 +113,11 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
                 </span>
                 {p.isHost && <span className="tag tag--host">{Icon.crown} Anfitrión</span>}
                 {!p.connected && <span className="tag tag--off">desconectado</span>}
+                {isHost && p.id !== room.you && (
+                  <button type="button" className="btn btn--ghost btn--sm player__kick" onClick={() => kick(p.id, p.nickname)} aria-label={`Expulsar a ${p.nickname}`}>
+                    Expulsar
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -150,6 +162,8 @@ export function Lobby({ room, catalogs, onLeave }: { room: RoomState; catalogs: 
           )}
         </div>
       </div>
+
+      <Chat messages={chat} you={room.you} />
 
       <div className="panel">
         <h2 className="h3">Ajustes de la partida{!isHost && <span className="muted"> · los elige el anfitrión</span>}</h2>

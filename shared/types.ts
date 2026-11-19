@@ -109,6 +109,8 @@ export interface Profile {
   vol: number;
   rankedGames: number;
   rankedWins: number;
+  /** Empates en competitivo: no cuentan ni como victoria ni como derrota. */
+  rankedDraws: number;
 }
 export interface LeaderRow { position: number; playerId: string; nickname: string; points: number; wins: number; games: number; rankedWins: number; rankedGames: number }
 /** Perfil tal como lo ve el cliente: sin MMR ni datos internos de Glicko. */
@@ -231,6 +233,21 @@ export interface ResultsView {
   missed: MissedSong[]; // de quien recibe la vista
   totalRounds: number;
   youWon: boolean; // cuenta como victoria para tu rango
+  /** Empate en el primer puesto: nadie suma victoria (ni derrota). */
+  tie: boolean;
+}
+
+// ---------- Chat de sala ----------
+export const CHAT_MAX_LENGTH = 200;
+export const CHAT_HISTORY = 50;
+export interface ChatMessage {
+  id: string;
+  playerId: string;
+  nickname: string;
+  text: string;
+  at: number;
+  /** Enviado durante una ronda: los demás lo verán al revelar la respuesta (sin chivatazos). */
+  held?: boolean;
 }
 
 export interface RoomState {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ROUND_MS, type RoomState } from '../../../shared/types';
+import { ROUND_MS, type ChatMessage, type RoomState } from '../../../shared/types';
+import { Chat } from './Chat';
 import { call, serverNow, socket } from '../net';
 import { fragmentStart, loadClip, onAudioStatus, playClip, setInstrumental, stopClip, unlockAudio, type AudioStatus } from '../audio';
 import { sfx } from '../sfx';
@@ -10,7 +11,7 @@ const RING = 2 * Math.PI * 26;
 const MAX_ATTEMPTS = 3;
 type LoadState = 'loading' | 'ready' | 'failed' | 'replacing';
 
-export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }) {
+export function Game({ room, chat, onLeave }: { room: RoomState; chat: ChatMessage[]; onLeave: () => void }) {
   const round = room.round!;
   const q = round.questionId;
   const me = room.players.find((p) => p.id === room.you)!;
@@ -239,6 +240,8 @@ export function Game({ room, onLeave }: { room: RoomState; onLeave: () => void }
           })}
         </ul>
       )}
+
+      {room.mode === 'multi' && <Chat messages={chat} you={room.you} collapsible />}
 
       {error && <Banner>{error}</Banner>}
       <button className="btn btn--ghost btn--sm leave" onClick={() => { if (confirm('¿Abandonar la partida?')) onLeave(); }}>Abandonar</button>

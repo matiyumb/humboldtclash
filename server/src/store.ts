@@ -8,7 +8,7 @@ import { DEFAULT_RATING, type LeaderRow, type Mix, type MixSummary, type MixTrac
 import { DEFAULT_RD, DEFAULT_VOL } from './glicko.js';
 
 export interface GameOutcome { playerId: string; nickname: string; score: number; correct: number; won: boolean }
-export interface RankedOutcome { playerId: string; mmr: number; rd: number; vol: number; won: boolean }
+export interface RankedOutcome { playerId: string; mmr: number; rd: number; vol: number; won: boolean; draw?: boolean }
 export interface MixInput { name: string; tracks: MixTrack[] }
 export interface Account { username: string; usernameKey: string; passHash: string; playerId: string; secret: string; createdAt: number }
 
@@ -32,7 +32,7 @@ export interface Store {
 
 export const emptyProfile = (playerId: string, nickname: string): Profile => ({
   playerId, nickname, points: 0, games: 0, wins: 0, correct: 0, best: 0,
-  mmr: DEFAULT_RATING, rd: DEFAULT_RD, vol: DEFAULT_VOL, rankedGames: 0, rankedWins: 0,
+  mmr: DEFAULT_RATING, rd: DEFAULT_RD, vol: DEFAULT_VOL, rankedGames: 0, rankedWins: 0, rankedDraws: 0,
 });
 
 function summarize(m: Mix): MixSummary {
@@ -119,7 +119,10 @@ export class JsonStore implements Store {
   async recordRanked(outcomes: RankedOutcome[]) {
     for (const o of outcomes) {
       const p = this.profilesMap.get(o.playerId) ?? emptyProfile(o.playerId, '');
-      this.profilesMap.set(o.playerId, { ...p, mmr: o.mmr, rd: o.rd, vol: o.vol, rankedGames: p.rankedGames + 1, rankedWins: p.rankedWins + (o.won ? 1 : 0) });
+      this.profilesMap.set(o.playerId, {
+        ...p, mmr: o.mmr, rd: o.rd, vol: o.vol,
+        rankedGames: p.rankedGames + 1, rankedWins: p.rankedWins + (o.won ? 1 : 0), rankedDraws: (p.rankedDraws ?? 0) + (o.draw ? 1 : 0),
+      });
     }
     this.persist();
   }
@@ -184,6 +187,7 @@ export class PgStore implements Store {
       ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS vol DOUBLE PRECISION NOT NULL DEFAULT ${DEFAULT_VOL};
       ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS ranked_games INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS ranked_wins INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE hc_profiles ADD COLUMN IF NOT EXISTS ranked_draws INTEGER NOT NULL DEFAULT 0;
       CREATE INDEX IF NOT EXISTS hc_profiles_rank ON hc_profiles (wins DESC, points DESC);
       CREATE INDEX IF NOT EXISTS hc_profiles_mmr ON hc_profiles (mmr DESC) WHERE ranked_games > 0;
       CREATE TABLE IF NOT EXISTS hc_mixes (
@@ -215,7 +219,7 @@ export class PgStore implements Store {
     return {
       playerId: String(r.player_id), nickname: String(r.nickname), points: Number(r.points), games: Number(r.games), wins: Number(r.wins),
       correct: Number(r.correct), best: Number(r.best), mmr: Number(r.mmr), rd: Number(r.rd), vol: Number(r.vol),
-      rankedGames: Number(r.ranked_games), rankedWins: Number(r.ranked_wins),
+      rankedGames: Number(r.ranked_games), rankedWins: Number(r.ranked_wins), rankedDraws: Number(r.ranked_draws ?? 0),
     };
   }
   private static mixRow(r: Record<string, unknown>): Mix {
@@ -258,14 +262,15 @@ export class PgStore implements Store {
   async recordRanked(outcomes: RankedOutcome[]) {
     for (const o of outcomes) {
       await this.db.query(
-        `INSERT INTO hc_profiles (player_id, nickname, mmr, rd, vol, ranked_games, ranked_wins)
-         VALUES ($1, '', $2, $3, $4, 1, $5)
+        `INSERT INTO hc_profiles (player_id, nickname, mmr, rd, vol, ranked_games, ranked_wins, ranked_draws)
+         VALUES ($1, '', $2, $3, $4, 1, $5, $6)
          ON CONFLICT (player_id) DO UPDATE SET
            mmr = EXCLUDED.mmr, rd = EXCLUDED.rd, vol = EXCLUDED.vol,
            ranked_games = hc_profiles.ranked_games + 1,
            ranked_wins = hc_profiles.ranked_wins + EXCLUDED.ranked_wins,
+           ranked_draws = hc_profiles.ranked_draws + EXCLUDED.ranked_draws,
            updated_at = now()`,
-        [o.playerId, o.mmr, o.rd, o.vol, o.won ? 1 : 0],
+        [o.playerId, o.mmr, o.rd, o.vol, o.won ? 1 : 0, o.draw ? 1 : 0],
       );
     }
   }
