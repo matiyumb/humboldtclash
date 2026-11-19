@@ -44,6 +44,7 @@ export function AccountAccess() {
 
 function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (value: boolean) => void; onSuccess: () => void }) {
   const [registering, setRegistering] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -81,7 +82,7 @@ function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (va
     <form className="account" onSubmit={submit}>
       <div className="tabs tabs--small" role="group" aria-label="Acceso a la cuenta">
         <button type="button" aria-pressed={!registering} className={!registering ? 'is-on' : ''} disabled={busy}
-          onClick={() => { setRegistering(false); setError(null); }}>Iniciar sesión</button>
+          onClick={() => { setRegistering(false); setPasswordVisible(false); setError(null); }}>Iniciar sesión</button>
         <button type="button" aria-pressed={registering} className={registering ? 'is-on' : ''} disabled={busy}
           onClick={() => { setRegistering(true); setError(null); }}>Registrarse</button>
       </div>
@@ -95,10 +96,20 @@ function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (va
         <span className="field__label">Nombre de usuario</span>
         <input className="input" name="username" autoComplete="username" minLength={3} maxLength={16} required />
       </label>
-      <label className="field">
-        <span className="field__label">Contraseña</span>
-        <input key={String(registering)} className="input" type="password" name="password" autoComplete={registering ? 'new-password' : 'current-password'} minLength={6} maxLength={100} required />
-      </label>
+      <div className="field">
+        <label className="field__label" htmlFor="account-password">Contraseña</label>
+        <div className={registering ? 'account-password account-password--with-toggle' : 'account-password'}>
+          <input id="account-password" key={String(registering)} className="input" type={registering && passwordVisible ? 'text' : 'password'}
+            name="password" autoComplete={registering ? 'new-password' : 'current-password'} minLength={6} maxLength={100} required />
+          {registering && (
+            <button type="button" className="account-password__toggle" aria-controls="account-password"
+              aria-label={passwordVisible ? 'Ocultar contraseña' : 'Ver contraseña'}
+              onClick={() => setPasswordVisible((visible) => !visible)}>
+              {passwordVisible ? 'Ocultar' : 'Ver'}
+            </button>
+          )}
+        </div>
+      </div>
       {registering && (
         <label className="field">
           <span className="field__label">Repite la contraseña</span>
