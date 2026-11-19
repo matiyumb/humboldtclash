@@ -123,9 +123,10 @@ export function SoundPanel() {
   );
 }
 
-export function CornerControls() {
+export function CornerControls({ children }: { children?: React.ReactNode }) {
   return (
     <div className="corner">
+      {children}
       <ThemeToggle />
       <SoundPanel />
     </div>

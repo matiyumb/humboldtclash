@@ -117,7 +117,8 @@ app.get('/api/ranking', async (req, res) => {
 app.post('/api/cuenta/registro', async (req, res) => {
   const id = req.body?.identity as Identity | undefined;
   if (!id || !validId(id.playerId) || !validId(id.secret)) return res.status(400).json({ ok: false, error: 'Identidad no válida. Recarga la página.' });
-  const r = await register(store, req.body?.username, req.body?.password, id);
+  const { username, email, password, confirmation } = req.body;
+  const r = await register(store, { username, email, password, confirmation }, id);
   res.status(r.ok ? 200 : 400).json(r);
 });
 

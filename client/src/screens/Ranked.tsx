@@ -4,7 +4,7 @@ import { call, identity, socket } from '../net';
 import { unlockAudio } from '../audio';
 import { sfx } from '../sfx';
 import { Banner, RankBadge, Waveform } from '../ui';
-import { AccountPanel, useAccount } from './Account';
+import { useAccount } from './Account';
 import { Leaderboard, useProfile } from './Profile';
 
 /** Modo competitivo: 1v1 contra jugadores registrados de tu rango, con MMR (Glicko-2). */
@@ -52,7 +52,7 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
           <h2 className="h2">⚔️ Competitivo 1v1</h2>
           <p className="muted">Duelos contra jugadores registrados de tu rango y nivel parecido.</p>
         </div>
-        <AccountPanel intro={<p className="account__intro">Para jugar en competitivo necesitas una cuenta (así nadie juega con perfiles desechables).</p>} />
+        <p className="panel ranked__access">Para jugar en competitivo, abre <b>Mi cuenta</b> arriba e inicia sesión o regístrate.</p>
       </div>
     );
   }

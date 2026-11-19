@@ -549,7 +549,7 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 .logo-btn--big:active { transform: scale(0.98); }
 
 /* Cabecera compacta del inicio */
-.home__head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 6px 104px 4px 0; }
+.home__head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 6px 210px 4px 0; }
 .home__head .logo__emblem { width: 64px; height: 64px; }
 .home__head .logo__text--big { font-size: clamp(30px, 6vw, 46px); }
 .home__headtext { flex: 1; min-width: 240px; }
@@ -592,13 +592,32 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 .stepper__value { min-width: 28px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
 
 /* Cuenta */
-.account { display: flex; flex-direction: column; gap: 10px; }
-.account--compact.panel { padding: 14px; }
-.account:not(.panel) { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
-.account__who { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
-.account__who b { color: var(--text); }
-.account__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
-.account__intro { margin: 0; color: var(--muted); }
+.account-trigger {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #dde4d7;
+  border-radius: 12px;
+  background: #fff;
+  color: #23351b;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.account-dialog {
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.account-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.account-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.account { display: flex; flex-direction: column; gap: 12px; }
+.account__who { margin: 0; }
+.ranked__access { margin: 0; }
 .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg-tint); }
 .tabs button { border: 0; border-radius: 9px; padding: 8px; background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; transition: background-color 200ms var(--smooth), color 200ms var(--smooth); }
 .tabs button.is-on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
@@ -634,7 +653,7 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
   .home__side { position: sticky; top: 72px; }
 }
 @media (max-width: 719px) {
-  .home__head { padding-right: 96px; }
+  .home__head { padding: 48px 0 4px; }
   .home__headtext .hero__wave { display: none; }
   .mode-tabs button { font-size: 15px; }
 }

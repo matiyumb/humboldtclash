@@ -432,9 +432,17 @@ describe('cuentas', () => {
   it('registro, usuario repetido, inicio de sesión y contraseña incorrecta', async () => {
     const s = new JsonStore(null);
     const ident = { playerId: 'cuenta-ana-xxxxxxxxxx', secret: 'secreto-ana-xxxxxxxxxx' };
-    expect((await register(s, 'Ana_99', 'clave-segura', ident)).ok).toBe(true);
-    expect((await register(s, 'ana_99', 'otra-clave', { playerId: 'cuenta-otra-xxxxxxxxx', secret: 'secreto-otra-xxxxxxxxx' })).ok).toBe(false);
-    expect((await register(s, 'x', 'clave-segura', ident)).ok).toBe(false);
+    const fields = { username: 'Ana_99', email: ' ana@example.com ', password: 'clave-segura', confirmation: 'clave-segura' };
+    expect(await register(s, { ...fields, email: undefined }, ident)).toEqual({ ok: false, error: 'Escribe un correo electrónico válido.' });
+    expect((await register(s, { ...fields, email: 'ana@' }, ident)).ok).toBe(false);
+    expect(await register(s, { ...fields, confirmation: 'otra-clave' }, ident)).toEqual({ ok: false, error: 'Las contraseñas no coinciden.' });
+    expect(await s.account('ana_99')).toBeNull();
+
+    expect((await register(s, fields, ident)).ok).toBe(true);
+    expect((await s.account('ana_99'))?.email).toBe('ana@example.com');
+    const other = { playerId: 'cuenta-otra-xxxxxxxxx', secret: 'secreto-otra-xxxxxxxxx' };
+    expect(await register(s, { ...fields, username: 'ana_99' }, other)).toEqual({ ok: false, error: 'Ese nombre de usuario ya está ocupado.' });
+    expect((await register(s, { ...fields, username: 'x' }, other)).ok).toBe(false);
     const ok = await login(s, 'ANA_99', 'clave-segura', '1.2.3.4');
     expect(ok).toEqual({ ok: true, username: 'Ana_99', identity: ident });
     expect((await login(s, 'Ana_99', 'mal', '1.2.3.4')).ok).toBe(false);

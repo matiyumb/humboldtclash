@@ -3,6 +3,7 @@ import { CHAT_HISTORY, type CatalogSummary, type ChatMessage, type GameSettings,
 import type { Catalogs } from './screens/CatalogPicker';
 import { call, identity, noteServerTime, socket, store } from './net';
 import { forgetClip, unlockAudio } from './audio';
+import { AccountAccess } from './screens/Account';
 import { Home } from './screens/Home';
 import { Setup } from './screens/Setup';
 import { Lobby } from './screens/Lobby';
@@ -254,7 +255,7 @@ export function App() {
   const screenKey = replaced ? 'replaced' : view.name === 'room' ? `room-${room?.phase ?? 'wait'}-${room?.round ? 'g' : 'i'}` : view.name === 'home' ? `home-${homeKey}` : view.name;
   return (
     <div className="app">
-      <CornerControls />
+      <CornerControls>{view.name === 'home' && !replaced && <AccountAccess />}</CornerControls>
       {!inGame && view.name !== 'home' && (
         <header className="topbar">
           <button className="logo-btn" onClick={goHome} aria-label="Ir al inicio"><Logo small /></button>
