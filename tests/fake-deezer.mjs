@@ -30,9 +30,26 @@ const toApi = (t, fresh = false) => ({
 
 const json = (res, data, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
 
-createServer((req, res) => {
+const mail = new Map();
+
+createServer(async (req, res) => {
   const url = new URL(req.url, BASE);
   const p = url.pathname;
+  if (p === '/emails' && req.method === 'POST') {
+    try {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const { to, text } = JSON.parse(body);
+      mail.set(to[0], text);
+      return json(res, { id: 'test-message' });
+    } catch {
+      return json(res, { error: 'Correo de prueba inválido' }, 400);
+    }
+  }
+  if (p === '/emails' && req.method === 'GET') {
+    const text = mail.get(url.searchParams.get('to'));
+    return text ? json(res, { text }) : json(res, { error: 'Correo no encontrado' }, 404);
+  }
   let m;
   if (p === '/search') {
     const words = (url.searchParams.get('q') ?? '').toLowerCase().replace(/(artist|track):/g, ' ').replace(/"/g, ' ').split(/\s+/).filter(Boolean);
