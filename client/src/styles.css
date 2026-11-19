@@ -328,7 +328,6 @@ a { color: var(--green-700); }
 .chip__name { font-weight: 700; }
 .chip__score { font-variant-numeric: tabular-nums; color: var(--green-700); font-weight: 700; }
 .chip__state { color: var(--muted); font-size: 13px; animation: fadeUp 0.3s var(--smooth) both; }
-.leave { align-self: center; }
 
 /* Resultados */
 .results { position: relative; display: flex; flex-direction: column; gap: 14px; text-align: center; align-items: stretch; padding-top: 8px; }
@@ -653,11 +652,7 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 /* ===================== Chat de sala, expulsar jugadores y empates ===================== */
 .chat { display: flex; flex-direction: column; gap: 10px; }
 .chat .h3 { margin: 0; }
-.chat__toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 2px 0; font-weight: 700; font-size: 17px; color: var(--text); cursor: pointer; text-align: left; }
-.chat__chev { margin-left: auto; color: var(--muted); }
-.chat__badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--green-600); color: var(--on-primary); font-size: 13px; display: inline-grid; place-items: center; }
 .chat__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
-.chat--fold .chat__list { max-height: 160px; }
 .chat__msg { padding: 6px 10px; border-radius: 12px; background: var(--bg-soft); overflow-wrap: anywhere; animation: chatIn 180ms var(--smooth) both; }
 .chat__msg.is-me { background: var(--green-100); }
 .chat__msg.is-held { opacity: 0.75; border: 1px dashed var(--line-strong); }
@@ -673,3 +668,21 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 .player__kick { margin-left: auto; min-height: 32px; padding: 4px 10px; font-size: 13px; }
 .tie-note { text-align: center; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 14px; padding: 10px 14px; margin: 0; }
 .ranked__record b.ranked__draws { color: var(--muted); }
+
+/* Partida: botones arriba a la izquierda (abandonar y chat) y chat como ventana emergente */
+.game-corner { position: fixed; top: 12px; left: 12px; z-index: 40; display: flex; gap: 8px; }
+.game-corner .corner-btn { position: relative; }
+.game-corner .corner-btn.is-on { background: var(--green-100); border-color: var(--green); }
+.corner-btn__badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); }
+.game .hud { padding-left: 104px; }
+.chat-pop { position: fixed; top: 64px; left: 12px; z-index: 45; width: min(360px, calc(100vw - 24px)); max-height: min(70vh, 520px); padding: 14px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow); animation: chatPopIn 200ms var(--smooth) both; transform-origin: top left; }
+.chat-pop .chat__list { flex: 1; min-height: 80px; max-height: none; }
+.chat-pop__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chat-pop__head .h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.chat-pop__head .h3 svg { width: 20px; height: 20px; color: var(--green-700); }
+.chat-pop__close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.chat-pop__close svg { width: 18px; height: 18px; }
+@keyframes chatPopIn { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .chat-pop { animation: none; } }
+@media (hover: hover) and (pointer: fine) { .chat-pop__close:hover { background: var(--bg-tint); color: var(--text); } }
+@media (max-width: 600px) { .game .hud { padding-left: 0; padding-right: 0; padding-top: 52px; } }

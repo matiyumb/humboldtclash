@@ -103,7 +103,7 @@ describe('expulsar jugadores', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('solo el anfitrión expulsa; el expulsado sale y no puede volver', async () => {
+  it('solo el anfitrión expulsa; el expulsado sale, pero puede volver a entrar', async () => {
     const { gm, last, got } = setup();
     const code = await multiRoom(gm, ['h', 'g', 'x']);
     expect(gm.kick('g', id('x').playerId)).toEqual({ ok: false, error: 'Solo el anfitrión puede expulsar jugadores.' });
@@ -113,8 +113,8 @@ describe('expulsar jugadores', () => {
     expect(got('g', 'room:kicked')).toHaveLength(1);
     expect(last.get('h')!.players.map((p) => p.id)).not.toContain(id('g').playerId);
     expect(gm.chat('g', 'sigo aquí').ok).toBe(false); // ya no está en la sala
-    expect(gm.joinRoom('g2', code, id('g'), 'Gaby')).toEqual({ ok: false, error: 'El anfitrión te ha expulsado de esta sala.' });
-    expect(gm.joinRoom('z', code, id('z'), 'Zoe').ok).toBe(true); // los demás sí pueden entrar
+    expect(gm.joinRoom('g2', code, id('g'), 'Gaby').ok).toBe(true); // no se le prohíbe volver
+    expect(last.get('h')!.players.map((p) => p.id)).toContain(id('g').playerId);
   });
 
   it('en plena partida el expulsado queda fuera y la ronda no le espera', async () => {
@@ -131,7 +131,8 @@ describe('expulsar jugadores', () => {
     gm.answer('h', q, gm._debugCorrect(code)!);
     gm.answer('g', q, gm._debugCorrect(code)!);
     expect(last.get('h')!.round!.phase).toBe('reveal');
-    expect(gm.joinRoom('x2', code, id('x'), 'X')).toEqual({ ok: false, error: 'El anfitrión te ha expulsado de esta sala.' });
+    expect(gm.joinRoom('x2', code, id('x'), 'X').ok).toBe(true); // puede volver a la partida
+    expect(last.get('h')!.players.find((p) => p.id === id('x').playerId)!.left).toBe(false);
   });
 
   it('no hay expulsiones en solitario', async () => {
@@ -241,5 +242,37 @@ describe('canciones que ya sonaron', () => {
     expect((await gm.playAgain('s')).ok).toBe(true);
     const second = playGame();
     for (const k of second) expect(first).not.toContain(k);
+  });
+});
+
+describe('puntos por orden de acierto', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  async function round(times: Record<string, number>) {
+    const { gm, last } = setup();
+    const players = Object.keys(times);
+    const code = await multiRoom(gm, players);
+    await gm.start(players[0]);
+    vi.advanceTimersByTime(INTRO_MS);
+    const q = last.get(players[0])!.round!.questionId;
+    for (const p of players) gm.ready(p, q);
+    const correct = gm._debugCorrect(code)!;
+    let t = 0;
+    for (const [p, ms] of Object.entries(times).sort((a, b) => a[1] - b[1])) {
+      vi.advanceTimersByTime(ms - t);
+      t = ms;
+      gm.answer(p, q, correct);
+    }
+    const reveal = last.get(players[0])!.round!.reveal!;
+    return Object.fromEntries(reveal.results.map((r) => [players.find((p) => id(p).playerId === r.playerId), r.points]));
+  }
+
+  it('1,3 s / 1,8 s / 2,7 s → +9 / +8 / +6', async () => {
+    expect(await round({ a: 1_300, b: 1_800, c: 2_700 })).toEqual({ a: 9, b: 8, c: 6 });
+  });
+
+  it('aunque caigan en el mismo medio segundo, el primero suma más', async () => {
+    expect(await round({ a: 1_300, b: 1_350 })).toEqual({ a: 9, b: 8 });
   });
 });

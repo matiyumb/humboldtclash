@@ -3,7 +3,7 @@ import { Catalog } from '../server/src/catalog';
 import { Deezer } from '../server/src/deezer';
 import { Library } from '../server/src/library';
 import { GameManager, rankStandings, LOAD_TIMEOUT_MS } from '../server/src/game';
-import { scoreFor, ROUND_MS, REVEAL_PAUSE_MS, INTRO_MS, DEFAULT_SETTINGS, LIGHTNING_MS, rankFor, sanitizeSettings, type RoomState } from '../shared/types';
+import { scoreFor, placementPoints, ROUND_MS, REVEAL_PAUSE_MS, INTRO_MS, DEFAULT_SETTINGS, LIGHTNING_MS, rankFor, sanitizeSettings, type RoomState } from '../shared/types';
 import { JsonStore } from '../server/src/store';
 import { byDifficulty } from '../server/src/library';
 
@@ -38,13 +38,23 @@ function setup() {
 }
 
 describe('puntuación', () => {
-  it('0 a 10 puntos: 5 + 1 por cada 2 s restantes, máximo 10', () => {
-    expect(scoreFor(true, 10_000)).toBe(10);
-    expect(scoreFor(true, 9_999)).toBe(10);
-    expect(scoreFor(true, 4_500)).toBe(7);
-    expect(scoreFor(true, 999)).toBe(5);
-    expect(scoreFor(true, 0)).toBe(5);
-    expect(scoreFor(false, 9_000)).toBe(0);
+  it('0 a 10 puntos por rapidez: 10 por debajo de 0,9 s y −1 cada 0,5 s (mínimo 1)', () => {
+    expect(scoreFor(true, 0)).toBe(10);
+    expect(scoreFor(true, 899)).toBe(10);
+    expect(scoreFor(true, 1_300)).toBe(9);
+    expect(scoreFor(true, 1_800)).toBe(8);
+    expect(scoreFor(true, 2_700)).toBe(6);
+    expect(scoreFor(true, 4_000)).toBe(3);
+    expect(scoreFor(true, 4_900)).toBe(1);
+    expect(scoreFor(true, 9_999)).toBe(1); // acertar siempre vale más que fallar
+    expect(scoreFor(false, 500)).toBe(0);
+  });
+  it('en una ronda, quien acierta antes siempre suma más', () => {
+    const pts = (hits: [string, number][]) => Object.fromEntries(placementPoints(hits.map(([id, ms]) => ({ id, ms, points: scoreFor(true, ms) }))));
+    expect(pts([['a', 1_300], ['b', 1_800], ['c', 2_700]])).toEqual({ a: 9, b: 8, c: 6 });
+    expect(pts([['a', 1_300], ['b', 1_350]])).toEqual({ a: 9, b: 8 }); // mismo medio segundo: igual gana el primero
+    expect(pts([['a', 1_300], ['b', 1_300]])).toEqual({ a: 9, b: 9 }); // mismo tiempo exacto: empate
+    expect(pts([['a', 6_000], ['b', 7_000]])).toEqual({ a: 1, b: 1 }); // nunca por debajo del mínimo
   });
   it('los empates comparten posición', () => {
     const rows = rankStandings([
@@ -98,12 +108,12 @@ describe('partidas', () => {
       st = last.get('s1')!;
       expect(st.round!.phase).toBe('reveal');
       expect(st.round!.reveal!.correctOptionId).toBe(correct);
-      expect(st.round!.yourAnswer!.points).toBe(i % 2 ? 9 : 0);
+      expect(st.round!.yourAnswer!.points).toBe(i % 2 ? 6 : 0); // 2,5 s → 6
       vi.advanceTimersByTime(REVEAL_PAUSE_MS);
     }
     const st = last.get('s1')!;
     expect(st.phase).toBe('results');
-    expect(st.results!.standings[0].score).toBe(5 * 9);
+    expect(st.results!.standings[0].score).toBe(5 * 6);
     expect(st.results!.standings[0].correct).toBe(5);
     expect(st.results!.missed).toHaveLength(5);
   });
@@ -284,9 +294,9 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
   });
 
   it('easter egg: acertar casi al instante da el máximo (10)', () => {
-    expect(scoreFor(true, 9_700, 300)).toBe(10);
-    expect(scoreFor(true, 6_000, LIGHTNING_MS + 3_600)).toBe(8);
-    expect(scoreFor(false, 9_900, 100)).toBe(0);
+    expect(scoreFor(true, 300)).toBe(10);
+    expect(scoreFor(true, LIGHTNING_MS + 3_600)).toBe(3);
+    expect(scoreFor(false, 100)).toBe(0);
   });
 
   it('dificultad por popularidad: mainstream arriba, nicho abajo, siempre ≥ rondas', () => {
@@ -322,7 +332,7 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
       st = last.get('s1')!;
       const res = st.round!.reveal!.results[0];
       if (i === 1) { expect(res.lightning).toBe(true); expect(res.points).toBe(10); }
-      else { expect(res.lightning).toBe(false); expect(res.points).toBe(9); }
+      else { expect(res.lightning).toBe(false); expect(res.points).toBe(8); } // 1,5 s → 8
       vi.advanceTimersByTime(REVEAL_PAUSE_MS);
     }
     const st = last.get('s1')!;

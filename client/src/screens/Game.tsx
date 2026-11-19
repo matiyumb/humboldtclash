@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ROUND_MS, type ChatMessage, type RoomState } from '../../../shared/types';
-import { Chat } from './Chat';
+import { ChatPopup, useChatUnread } from './Chat';
 import { call, serverNow, socket } from '../net';
 import { fragmentStart, loadClip, onAudioStatus, playClip, setInstrumental, stopClip, unlockAudio, type AudioStatus } from '../audio';
 import { sfx } from '../sfx';
@@ -23,6 +24,10 @@ export function Game({ room, chat, onLeave }: { room: RoomState; chat: ChatMessa
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(serverNow());
   const [audio, setAudio] = useState<AudioStatus>('idle');
+  const hasChat = room.mode === 'multi';
+  const [chatOpen, setChatOpen] = useState(false);
+  const closeChat = useCallback(() => setChatOpen(false), []);
+  const unread = useChatUnread(chat, room.you, chatOpen);
   const currentQ = useRef(q);
   currentQ.current = q;
 
@@ -145,6 +150,30 @@ export function Game({ room, chat, onLeave }: { room: RoomState; chat: ChatMessa
 
   return (
     <section className="game">
+      {/* En <body>: la pantalla tiene animación (transform) y lo «fixed» dejaría de pegarse a la ventana. */}
+      {createPortal(<>
+      <div className="game-corner">
+        <button type="button" className="corner-btn" onClick={() => { if (confirm('¿Abandonar la partida?')) onLeave(); }} aria-label="Abandonar la partida" title="Abandonar">
+          {Icon.exit}
+        </button>
+        {hasChat && (
+          <button
+            type="button"
+            className={`corner-btn ${chatOpen ? 'is-on' : ''}`}
+            onClick={() => setChatOpen((o) => !o)}
+            aria-expanded={chatOpen}
+            aria-controls="game-chat"
+            aria-label={unread > 0 ? `Chat, ${unread} mensajes nuevos` : 'Chat'}
+            title="Chat"
+          >
+            {Icon.chat}
+            {unread > 0 && <span className="corner-btn__badge" aria-hidden="true">{unread > 9 ? '9+' : unread}</span>}
+          </button>
+        )}
+      </div>
+      {hasChat && <ChatPopup id="game-chat" messages={chat} you={room.you} open={chatOpen} onClose={closeChat} />}
+      </>, document.body)}
+
       <header className="hud">
         <div className="hud__item">
           <span className="hud__label">Ronda</span>
@@ -241,10 +270,7 @@ export function Game({ room, chat, onLeave }: { room: RoomState; chat: ChatMessa
         </ul>
       )}
 
-      {room.mode === 'multi' && <Chat messages={chat} you={room.you} collapsible />}
-
       {error && <Banner>{error}</Banner>}
-      <button className="btn btn--ghost btn--sm leave" onClick={() => { if (confirm('¿Abandonar la partida?')) onLeave(); }}>Abandonar</button>
     </section>
   );
 }

@@ -59,15 +59,38 @@ export function sanitizeSettings(raw: unknown): GameSettings {
 /** Puntos por canción: 0 a 10. */
 export const MAX_POINTS = 10;
 
+/** Cada medio segundo de más tras el «oído biónico» resta un punto. */
+export const POINT_STEP_MS = 500;
+/** Un acierto siempre vale al menos esto (más que un fallo). */
+export const MIN_CORRECT_POINTS = 1;
+
 /**
- * 0 a 10 puntos por canción. Fallo o tiempo agotado: 0.
- * Acierto: 5 + 1 punto por cada 2 segundos que queden (redondeado), máximo 10.
- * Responder en el primer segundo da 10; el «oído biónico» (≤ 0,4 s) también.
+ * 0 a 10 puntos por canción según lo rápido que aciertes. Fallo o tiempo agotado: 0.
+ * Por debajo de 0,9 s: 10 (≤ 0,4 s además es «oído biónico»). Después, −1 por cada 0,5 s:
+ * 1,3 s → 9 · 1,8 s → 8 · 2,7 s → 6 · 4 s → 3 · desde 4,9 s → 1.
  */
-export function scoreFor(correct: boolean, remainingMs: number, elapsedMs = Infinity): number {
+export function scoreFor(correct: boolean, elapsedMs: number): number {
   if (!correct) return 0;
-  if (elapsedMs <= LIGHTNING_MS) return MAX_POINTS;
-  return Math.min(MAX_POINTS, 5 + Math.round(Math.max(0, remainingMs) / 2000));
+  const late = Math.max(0, elapsedMs - LIGHTNING_MS);
+  return Math.max(MIN_CORRECT_POINTS, MAX_POINTS - Math.floor(late / POINT_STEP_MS));
+}
+
+/**
+ * En una ronda con varios jugadores, quien acierta antes siempre suma más que quien acierta
+ * después: cada acierto vale como mucho 1 punto menos que el anterior (mismo tiempo exacto =
+ * mismos puntos; nunca por debajo de MIN_CORRECT_POINTS). Devuelve los puntos finales por id.
+ */
+export function placementPoints(hits: { id: string; ms: number; points: number }[]): Map<string, number> {
+  const out = new Map<string, number>();
+  let prevMs = -1;
+  let prevPts = Infinity;
+  for (const h of [...hits].sort((a, b) => a.ms - b.ms)) {
+    const pts = h.ms === prevMs ? prevPts : Math.max(MIN_CORRECT_POINTS, Math.min(h.points, prevPts - 1));
+    out.set(h.id, pts);
+    prevMs = h.ms;
+    prevPts = pts;
+  }
+  return out;
 }
 
 // ---------- Rangos por victorias ----------
