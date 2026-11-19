@@ -621,7 +621,7 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 .account { display: flex; flex-direction: column; gap: 12px; }
 .account__who { margin: 0; overflow-wrap: anywhere; }
 .account-password { position: relative; }
-.account-password--with-toggle .input { padding-right: 52px; }
+.account-password .input { padding-right: 52px; }
 .account-password__toggle {
   position: absolute;
   inset: 3px 4px 3px auto;
