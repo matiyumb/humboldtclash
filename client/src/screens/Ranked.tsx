@@ -52,7 +52,7 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
           <h2 className="h2">⚔️ Competitivo 1v1</h2>
           <p className="muted">Duelos contra jugadores registrados de tu rango y nivel parecido.</p>
         </div>
-        <p className="panel ranked__access">Para jugar en competitivo, abre <b>Mi cuenta</b> arriba e inicia sesión o regístrate.</p>
+        <p className="panel ranked__access">Para jugar en competitivo, usa el botón <b>Iniciar sesión</b> de arriba para entrar o registrarte.</p>
       </div>
     );
   }

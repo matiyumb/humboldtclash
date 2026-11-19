@@ -76,7 +76,7 @@ Las tablas se crean solas al arrancar. En `/api/health`, el campo `store` dice `
 
 ## Competitivo 1v1 y cuentas
 
-- **Cuenta:** el botón «Mi cuenta» abre el formulario de acceso. Para registrarte, indica tu correo, elige un nombre de usuario único y confirma tu contraseña (guardada con scrypt). Para entrar, usa tu nombre de usuario y contraseña. Al crearla, el progreso del navegador pasa a la cuenta y puedes entrar desde cualquier dispositivo.
+- **Cuenta:** el botón «Iniciar sesión» abre el formulario de acceso. Para registrarte, indica tu correo, elige un nombre de usuario único y confirma tu contraseña (guardada con scrypt). Escribe el código de seis cifras recibido por correo para activar la cuenta. Para entrar, usa tu nombre de usuario y contraseña. Al crearla, el progreso del navegador pasa a la cuenta y puedes entrar desde cualquier dispositivo.
 - **Competitivo:** solo para cuentas registradas. Son duelos 1v1 de 10 canciones de «Éxitos del momento».
   - El emparejamiento busca tu **mismo rango** y un **MMR parecido** (±100).
   - El margen crece con la espera (+15 por segundo). A los 20 s acepta rangos vecinos y a los 45 s cualquiera.
@@ -96,10 +96,14 @@ Para activarlos, arranca con `ADS=1` (y opcionalmente `ADS_CLIENT=<id del provee
 | --- | --- |
 | `PORT` | Puerto (Render lo pone solo) |
 | `DATABASE_URL` | Postgres para guardar puntos, rangos, MMR, cuentas y playlists |
+| `RESEND_API_KEY` | Clave de Resend para enviar los códigos de registro. Configúrala como secreto en Render |
+| `VERIFICATION_FROM_EMAIL` | Remitente de Resend, por ejemplo `Humboldtclash <cuentas@tu-dominio.example>`, con el dominio verificado en Resend |
 | `DEEZER=off` | Desactiva Deezer |
 | `LASTFM_API_KEY` | Opcional. Usa los oyentes de Last.fm para repartir la dificultad (si no está, se usa la popularidad de Deezer) |
 | `ADS=1`, `ADS_CLIENT` | Activa los huecos de publicidad |
 | `CATALOG_DIR` | Carpeta con `catalog/` y `audio/` para canciones propias |
+
+Para activar el registro en producción, configura ambas variables de correo en Render. Las cuentas existentes pueden iniciar sesión aunque el correo no esté configurado. Un código caduca en 10 minutos, tras cinco intentos incorrectos o al reiniciarse el servidor. En cualquiera de esos casos se puede volver al registro y solicitar otro.
 
 ## ¿Por qué Deezer y no Spotify?
 
@@ -157,7 +161,7 @@ Necesita Playwright con Chromium instalado.
 2. Arranca el servidor en modo de prueba. Este modo expone las respuestas, así que **nunca lo uses en producción**.
 
    ```bash
-   npm run build && CATALOG_DIR=tests/fixtures DEEZER_API_BASE=http://127.0.0.1:4100 HUMBOLDTCLASH_TEST=1 PORT=3100 npm start
+   npm run build && CATALOG_DIR=tests/fixtures DEEZER_API_BASE=http://127.0.0.1:4100 TEST_MAIL_ORIGIN=http://127.0.0.1:4100 HUMBOLDTCLASH_TEST=1 PORT=3100 npm start
    ```
 
 3. En otra terminal, lanza la prueba:
