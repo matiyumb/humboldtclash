@@ -15,7 +15,7 @@ Se juega solo o en salas privadas de 2 a 5 amigos, en el móvil o en el ordenado
 | --- | --- |
 | `GET /api/catalogs` | Devuelve los destacados de Deezer (de `catalog/destacados.json`) y el catálogo local. |
 | `GET /api/deezer/artistas?q=quevedo` | Busca artistas en Deezer. |
-| `GET /api/catalogs/:id/check` | Comprueba si un catálogo tiene ≥10 canciones distintas con audio. El id puede ser `deezer:artist:<id>`, `deezer:playlist:<id>`, `deezer:chart` o uno local. |
+| `GET /api/catalogs/:id/check` | Comprueba si un catálogo tiene ≥10 canciones distintas con audio. El ID puede ser `deezer:artist:<id>`, `deezer:playlist:<id>`, `deezer:chart` o uno local. |
 | `GET /api/salas-publicas` | Lista las salas públicas en espera que tienen hueco. |
 | `GET /api/audio/<token>` | Sirve el audio de la ronda sin revelar la canción. Si Deezer caducó la URL, pide una nueva y reintenta. |
 
