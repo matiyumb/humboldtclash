@@ -76,7 +76,7 @@ Las tablas se crean solas al arrancar. En `/api/health`, el campo `store` dice `
 
 ## Competitivo 1v1 y cuentas
 
-- **Cuenta:** usuario y contraseña (guardada con scrypt). Al crearla, el progreso del navegador pasa a la cuenta y puedes entrar desde cualquier dispositivo.
+- **Cuenta:** el botón «Mi cuenta» abre el formulario de acceso. Para registrarte, indica tu correo, elige un nombre de usuario único y confirma tu contraseña (guardada con scrypt). Para entrar, usa tu nombre de usuario y contraseña. Al crearla, el progreso del navegador pasa a la cuenta y puedes entrar desde cualquier dispositivo.
 - **Competitivo:** solo para cuentas registradas. Son duelos 1v1 de 10 canciones de «Éxitos del momento».
   - El emparejamiento busca tu **mismo rango** y un **MMR parecido** (±100).
   - El margen crece con la espera (+15 por segundo). A los 20 s acepta rangos vecinos y a los 45 s cualquiera.

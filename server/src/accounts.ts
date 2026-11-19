@@ -43,15 +43,27 @@ export const clearFailures = (key: string) => attempts.delete(key);
 
 export type AuthResult = { ok: true; username: string; identity: Identity } | { ok: false; error: string };
 
-export async function register(store: Store, username: unknown, password: unknown, identity: Identity): Promise<AuthResult> {
+export async function register(
+  store: Store,
+  { username, email, password, confirmation }: { username: unknown; email: unknown; password: unknown; confirmation: unknown },
+  identity: Identity,
+): Promise<AuthResult> {
+  const address = typeof email === 'string' ? email.trim() : '';
+  if (address.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+    return { ok: false, error: 'Escribe un correo electrónico válido.' };
+  }
   if (!validUsername(username)) return { ok: false, error: 'El usuario debe tener de 3 a 16 letras, números, «_», «-» o «.».' };
   if (!validPassword(password)) return { ok: false, error: 'La contraseña debe tener al menos 6 caracteres.' };
+  if (password !== confirmation) return { ok: false, error: 'Las contraseñas no coinciden.' };
   if (await store.accountOf(identity.playerId)) return { ok: false, error: 'Este navegador ya tiene una cuenta. Inicia sesión.' };
   const acc: Account = {
-    username: username.trim(), usernameKey: usernameKey(username), passHash: await hashPassword(password),
+    email: address, username: username.trim(), usernameKey: usernameKey(username), passHash: await hashPassword(password),
     playerId: identity.playerId, secret: identity.secret, createdAt: Date.now(),
   };
-  if (!(await store.createAccount(acc))) return { ok: false, error: 'Ese nombre de usuario ya está ocupado.' };
+  if (!(await store.createAccount(acc))) {
+    if (await store.accountOf(identity.playerId)) return { ok: false, error: 'Este navegador ya tiene una cuenta. Inicia sesión.' };
+    return { ok: false, error: 'Ese nombre de usuario ya está ocupado.' };
+  }
   return { ok: true, username: acc.username, identity };
 }
 

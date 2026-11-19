@@ -3,7 +3,7 @@ import type { CatalogSummary, PublicRoom } from '../../../shared/types';
 import { Icon, Logo, Waveform } from '../ui';
 import { Leaderboard, ProfileCard, useProfile } from './Profile';
 import { CatalogPicker, type Catalogs } from './CatalogPicker';
-import { AccountPanel, useAccount } from './Account';
+import { useAccount } from './Account';
 import { Ranked } from './Ranked';
 import { AdSlot } from './AdSlot';
 
@@ -139,7 +139,6 @@ export function Home(p: Props) {
 
         <aside className="home__side" aria-label="Tu perfil y ranking">
           <ProfileCard profile={profile} />
-          {p.tab === 'casual' && <AccountPanel compact />}
           <button className="mixes-cta" onClick={p.onMixes}>
             <span className="mixes-cta__icon" aria-hidden="true">♫</span>
             <span><b>Mis playlists</b><small>Mezcla artistas o importa tus listas</small></span>

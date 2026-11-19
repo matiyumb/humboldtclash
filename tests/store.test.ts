@@ -45,9 +45,9 @@ function suite(name: string, make: () => Promise<Store>) {
     it('cuentas y MMR competitivo; ranking competitivo por victorias', async () => {
       const run = Date.now().toString(36);
       const acc = { username: `Ana${run}`.slice(0, 16), usernameKey: `ana${run}`.slice(0, 16), passHash: 'scrypt$x$y', playerId: `cuenta-${run}-xxxxxxxx`, secret: 'secreto-xxxxxxxxxxxx', createdAt: Date.now() };
-      expect(await s.createAccount(acc)).toBe(true);
+      expect(await s.createAccount({ ...acc, email: 'ana@example.com' })).toBe(true);
       expect(await s.createAccount({ ...acc, playerId: `otra-${run}-xxxxxxxxxx` })).toBe(false);
-      expect((await s.account(acc.usernameKey))!.playerId).toBe(acc.playerId);
+      expect(await s.account(acc.usernameKey)).toMatchObject({ playerId: acc.playerId, email: 'ana@example.com' });
       expect((await s.accountOf(acc.playerId))!.username).toBe(acc.username);
       const p1 = `mmr-a-${run}-xxxxxxxxx`, p2 = `mmr-b-${run}-xxxxxxxxx`;
       await s.recordRanked([{ playerId: p1, mmr: 1662, rd: 290, vol: 0.06, won: true }, { playerId: p2, mmr: 1338, rd: 290, vol: 0.06, won: false }]);

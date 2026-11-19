@@ -480,10 +480,18 @@ log('\n▶ Competitivo 1v1: cuentas, emparejamiento y MMR');
   for (const [pg, name] of [[a, `Ana${run}`], [b, `Beto${run}`]]) {
     await pg.goto(BASE);
     await pg.click('.mode-tabs button:has-text("Competitivo")');
-    await pg.waitForSelector('.ranked form.account');
-    await pg.fill('.ranked .account input[autocomplete="username"]', name);
-    await pg.fill('.ranked .account input[type=password]', 'clave-segura-1');
-    await pg.click('.ranked .account button[type=submit]');
+    await pg.getByRole('button', { name: 'Mi cuenta' }).click();
+    const account = pg.getByRole('dialog', { name: 'Mi cuenta' });
+    await account.getByRole('button', { name: 'Registrarse' }).click();
+    await account.getByLabel('Correo electrónico').fill(`${name}@example.com`);
+    await account.getByLabel('Nombre de usuario').fill(name);
+    await account.getByLabel('Contraseña', { exact: true }).fill('clave-segura-1');
+    await account.getByLabel('Repite la contraseña').fill('clave-distinta');
+    await account.getByRole('button', { name: 'Crear cuenta' }).click();
+    await account.getByText('Las contraseñas no coinciden.').waitFor();
+    await account.getByLabel('Repite la contraseña').fill('clave-segura-1');
+    await account.getByRole('button', { name: 'Crear cuenta' }).click();
+    await account.waitFor({ state: 'hidden' });
     await pg.waitForSelector('.ranked__record');
   }
   check(true, 'dos jugadores crean su cuenta desde la pestaña Competitivo');

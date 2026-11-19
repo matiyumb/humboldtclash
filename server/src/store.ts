@@ -10,7 +10,7 @@ import { DEFAULT_RD, DEFAULT_VOL } from './glicko.js';
 export interface GameOutcome { playerId: string; nickname: string; score: number; correct: number; won: boolean }
 export interface RankedOutcome { playerId: string; mmr: number; rd: number; vol: number; won: boolean; draw?: boolean }
 export interface MixInput { name: string; tracks: MixTrack[] }
-export interface Account { username: string; usernameKey: string; passHash: string; playerId: string; secret: string; createdAt: number }
+export interface Account { email?: string; username: string; usernameKey: string; passHash: string; playerId: string; secret: string; createdAt: number }
 
 export interface Store {
   readonly kind: 'postgres' | 'json' | 'memory';
@@ -128,7 +128,7 @@ export class JsonStore implements Store {
   }
   async leaderboard(limit: number, by: 'wins' | 'ranked' = 'wins') { return rankRows([...this.profilesMap.values()], limit, by); }
   async createAccount(a: Account) {
-    if (this.accounts.has(a.usernameKey)) return false;
+    if (this.accounts.has(a.usernameKey) || [...this.accounts.values()].some((existing) => existing.playerId === a.playerId)) return false;
     this.accounts.set(a.usernameKey, a);
     this.persist();
     return true;
@@ -207,6 +207,7 @@ export class PgStore implements Store {
         secret TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+      ALTER TABLE hc_accounts ADD COLUMN IF NOT EXISTS email TEXT;
     `);
   }
 
@@ -228,7 +229,7 @@ export class PgStore implements Store {
     return { ...summarize(base), tracks };
   }
   private static accRow(r: Record<string, unknown>): Account {
-    return { username: String(r.username), usernameKey: String(r.username_key), passHash: String(r.pass_hash), playerId: String(r.player_id), secret: String(r.secret), createdAt: new Date(String(r.created_at)).getTime() };
+    return { email: typeof r.email === 'string' ? r.email : undefined, username: String(r.username), usernameKey: String(r.username_key), passHash: String(r.pass_hash), playerId: String(r.player_id), secret: String(r.secret), createdAt: new Date(String(r.created_at)).getTime() };
   }
 
   async profile(id: string) {
@@ -282,8 +283,8 @@ export class PgStore implements Store {
   }
   async createAccount(a: Account) {
     const r = await this.db.query(
-      'INSERT INTO hc_accounts (username_key, username, pass_hash, player_id, secret) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
-      [a.usernameKey, a.username, a.passHash, a.playerId, a.secret],
+      'INSERT INTO hc_accounts (username_key, username, pass_hash, player_id, secret, email) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
+      [a.usernameKey, a.username, a.passHash, a.playerId, a.secret, a.email ?? null],
     );
     return (r.rowCount ?? 0) > 0;
   }
