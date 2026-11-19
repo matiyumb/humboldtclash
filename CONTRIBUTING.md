@@ -24,6 +24,8 @@ npm run dev
 - **Claude Code** lee `CLAUDE.md` → `AGENTS.md` automáticamente.
 - **Codex** lee `AGENTS.md`.
 - **Antigravity / Gemini** lee `GEMINI.md` → `AGENTS.md`.
+- **En GitHub**: escribe `@claude` (o `@codex`) en un issue o en un comentario de un PR y el agente responde, revisa o propone cambios.
+  `@claude` usa `.github/workflows/claude.yml`; `@codex` usa la app «ChatGPT Codex Connector».
 - Pide al agente que trabaje en una rama, que añada pruebas y que **no** toque `main` directamente.
 - Revisa siempre el diff antes de aprobar el PR: el agente puede equivocarse.
 
