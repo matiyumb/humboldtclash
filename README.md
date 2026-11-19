@@ -112,12 +112,12 @@ Por eso las playlists de Spotify se traen **importando la lista**: se exporta co
 1. Escribe tu apodo (juegas como invitado, sin cuenta).
 2. **Jugar solo:** elige un artista o una colección. Se comprueba que tenga al menos 10 canciones distintas con audio, y luego pulsas «Empezar partida».
 3. **Crear sala:** compartes el código de 6 caracteres o el enlace. El anfitrión elige el catálogo y empieza la partida.
-   El anfitrión puede **expulsar** a un jugador (en salas públicas o privadas); quien es expulsado no puede volver a esa sala.
-   Las salas tienen **chat** (en la sala de espera, en la partida y en los resultados). Lo que escribes mientras suena una canción no lo ven los demás hasta la revelación, para que nadie chive la respuesta. Máximo 200 caracteres y 5 mensajes cada 5 s.
+   El anfitrión puede **expulsar** a un jugador (en salas públicas o privadas); quien es expulsado sale de la sala, aunque puede volver a entrar con el código.
+   Las salas tienen **chat**: en la sala de espera y en los resultados, y durante la partida como **ventana emergente** que se abre con el botón de arriba a la izquierda (junto a «Abandonar»). Lo que escribes mientras suena una canción no lo ven los demás hasta la revelación, para que nadie chive la respuesta. Máximo 200 caracteres y 5 mensajes cada 5 s.
 4. Eliges de **5 a 20 canciones** por partida, la **duración del fragmento** (1 a 5 s, o completo), el modo **solo instrumental** (quita la voz), el **tamaño de la sala** (2 a 10), la **dificultad** (General, Mainstream, Fan o Nicho, según los oyentes en Last.fm si hay `LASTFM_API_KEY`, o la popularidad en Deezer si no) y si quieres el **modo 1 segundo**.
    Cada fragmento empieza en un punto al azar de la canción (el mismo para toda la sala).
    Una canción que ya sonó **no vuelve a salir**, ni como pregunta ni como opción falsa (solo si el catálogo es tan pequeño que no queda otra). Con «Jugar otra vez» salen primero las canciones que aún no han sonado en la sala.
-5. Cada canción vale de **0 a 10 puntos**: un fallo o el tiempo agotado valen 0. Un acierto vale `5 + 1 punto por cada 2 segundos que queden`, con un máximo de 10. ⚡ Si aciertas en menos de 0,4 s, ganas la insignia «Oído biónico».
+5. Cada canción vale de **0 a 10 puntos**: un fallo o el tiempo agotado valen 0. Un acierto vale **10 si respondes en menos de 0,9 s** y **1 punto menos por cada medio segundo más** (1,3 s → 9 · 1,8 s → 8 · 2,7 s → 6 · 4 s → 3), con un mínimo de 1. Si varios aciertan, **quien acierta antes siempre suma más** que quien acierta después (aunque sea por centésimas). ⚡ Si aciertas en menos de 0,4 s, ganas la insignia «Oído biónico».
 6. **Rangos por victorias multijugador:** Rookie (50, bronce), Conocedor (100, plata), Fan (500, oro) y Melófano (5000, realeza).
    Solo gana **el 1.º en solitario** de cada partida. Un **empate** en el primer puesto no cuenta como victoria ni como derrota para nadie. El modo solo es práctica y no suma.
 7. **Mis playlists:** mezcla canciones de varios artistas, rellénalas al azar («🎲 5 al azar») y bárajalas.

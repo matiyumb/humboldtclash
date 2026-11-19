@@ -72,7 +72,7 @@ export function Lobby({ room, catalogs, chat, onLeave }: { room: RoomState; cata
   };
 
   const kick = async (playerId: string, nickname: string) => {
-    if (!confirm(`¿Expulsar a ${nickname}? No podrá volver a entrar en esta sala.`)) return;
+    if (!confirm(`¿Expulsar a ${nickname} de la sala?`)) return;
     const r = await call('room:kick', { playerId });
     setError(r.ok ? null : r.error);
   };

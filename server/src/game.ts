@@ -2,7 +2,7 @@ import { randomBytes, createHash, timingSafeEqual, randomInt } from 'node:crypto
 import { extname } from 'node:path';
 import {
   MAX_PLAYERS, MIN_PLAYERS_MULTI, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUND_MS, LIGHTNING_MS, CHAT_HISTORY, CHAT_MAX_LENGTH, type ChatMessage,
-  scoreFor, sanitizeSettings, rankFor, DEFAULT_SETTINGS, DEFAULT_RATING, DEFAULT_ROOM_SIZE, RANKED_SETTINGS, RANKED_CATALOG, type GameSettings, type RatingChange,
+  scoreFor, placementPoints, sanitizeSettings, rankFor, DEFAULT_SETTINGS, DEFAULT_RATING, DEFAULT_ROOM_SIZE, RANKED_SETTINGS, RANKED_CATALOG, type GameSettings, type RatingChange,
   type Ack, type Identity, type MissedSong, type PlayerView, type RevealView, type RoomState, type RoundResult, type StandingRow,
 } from '../../shared/types.js';
 import { AUDIO_TYPES, titleKey, type Track } from './catalog.js';
@@ -75,8 +75,6 @@ interface Room {
   introUntil: number | null;
   settings: GameSettings;
   recorded: boolean; // resultados ya guardados en el perfil
-  /** Jugadores expulsados por el anfitrión: no pueden volver a esta sala. */
-  banned: Set<string>;
   chat: ChatMessage[];
   /** Mensajes enviados con una ronda en marcha: se muestran al revelar la respuesta. */
   chatHeld: ChatMessage[];
@@ -85,7 +83,7 @@ interface Room {
 }
 
 /** Campos de una sala recién creada que no dependen del modo. */
-const freshRoomState = () => ({ banned: new Set<string>(), chat: [] as ChatMessage[], chatHeld: [] as ChatMessage[], seen: new Set<string>() });
+const freshRoomState = () => ({ chat: [] as ChatMessage[], chatHeld: [] as ChatMessage[], seen: new Set<string>() });
 
 export const CHAT_WINDOW_MS = 5_000;
 export const CHAT_MAX_PER_WINDOW = 5;
@@ -342,7 +340,6 @@ export class GameManager {
     const code = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : '';
     const room = this.rooms.get(code);
     const existing = room?.players.find((p) => p.id === identity.playerId);
-    if (room?.banned.has(identity.playerId)) return { ok: false, error: 'El anfitrión te ha expulsado de esta sala.' };
 
     // Reconexión: mismo navegador (mismo id y secreto).
     if (room && existing) {
@@ -385,7 +382,7 @@ export class GameManager {
     return { ok: true, code, rejoined: false };
   }
 
-  /** El anfitrión expulsa a un jugador (salas multijugador, públicas o privadas). No puede volver a entrar. */
+  /** El anfitrión expulsa a un jugador (salas multijugador, públicas o privadas). Puede volver a entrar si quiere. */
   kick(socketId: string, targetId: unknown): Ack {
     const ctx = this.ctx(socketId);
     if (!ctx) return { ok: false, error: 'No estás en una sala.' };
@@ -395,7 +392,6 @@ export class GameManager {
     if (targetId === player.id) return { ok: false, error: 'No puedes expulsarte a ti mismo.' };
     const target = room.players.find((p) => p.id === targetId && !p.left);
     if (!target) return { ok: false, error: 'Ese jugador ya no está en la sala.' };
-    room.banned.add(target.id);
     if (target.lobbyTimer) { clearTimeout(target.lobbyTimer); target.lobbyTimer = undefined; }
     if (target.socketId) {
       this.sockets.delete(target.socketId);
@@ -537,7 +533,7 @@ export class GameManager {
     if (!option) return { ok: false, error: 'Opción no válida.' };
     const correct = option.id === round.correctOptionId;
     const elapsed = now - (round.deadline - ROUND_MS);
-    round.answers.set(player.id, { optionId: option.id, correct, points: scoreFor(correct, round.deadline - now, elapsed), lightning: correct && elapsed <= LIGHTNING_MS, ms: Math.max(0, elapsed) });
+    round.answers.set(player.id, { optionId: option.id, correct, points: scoreFor(correct, Math.max(0, elapsed)), lightning: correct && elapsed <= LIGHTNING_MS, ms: Math.max(0, elapsed) });
     if (this.activePlayers(room).every((p) => round.answers.has(p.id))) this.reveal(room);
     else this.broadcast(room);
     return { ok: true, accepted: true };
@@ -756,6 +752,11 @@ export class GameManager {
     const round = room.round;
     if (!round || round.phase === 'reveal') return;
     round.phase = 'reveal';
+    // Quien acierta antes suma más que quien acierta después (aunque caigan en el mismo medio segundo).
+    if (!voided) {
+      const hits = [...round.answers].filter(([, a]) => a.correct).map(([id, a]) => ({ id, ms: a.ms, points: a.points }));
+      for (const [id, pts] of placementPoints(hits)) round.answers.get(id)!.points = pts;
+    }
     const results = new Map<string, RoundResult>();
     for (const p of room.players) {
       const a = voided ? undefined : round.answers.get(p.id);

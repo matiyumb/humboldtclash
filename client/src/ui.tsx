@@ -207,6 +207,8 @@ export const Icon = {
   user: <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor" /><path d="M4 21a8 8 0 0116 0" fill="currentColor" /></svg>,
   retry: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
   back: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  exit: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4H6.5A1.5 1.5 0 005 5.5v13A1.5 1.5 0 006.5 20H14M10 12h10m-3.5-3.5L20 12l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  chat: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1.5 1.5 0 011.5 1.5v9A1.5 1.5 0 0119 17h-7l-4.5 3.5V17H5a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 015 5z" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round" /><path d="M8 10h8M8 13h5" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" /></svg>,
 };
 
 export function Banner({ kind = 'error', children }: { kind?: 'error' | 'info'; children: React.ReactNode }) {
