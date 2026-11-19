@@ -621,19 +621,20 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 .account { display: flex; flex-direction: column; gap: 12px; }
 .account__who { margin: 0; overflow-wrap: anywhere; }
 .account-password { position: relative; }
-.account-password--with-toggle .input { padding-right: 94px; }
+.account-password--with-toggle .input { padding-right: 52px; }
 .account-password__toggle {
   position: absolute;
   inset: 3px 4px 3px auto;
-  min-width: 72px;
+  width: 44px;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 10px;
   background: var(--surface);
   color: var(--green-700);
-  font-size: 14px;
-  font-weight: 700;
   cursor: pointer;
 }
+.account-password__toggle svg { width: 20px; height: 20px; }
 @media (hover: hover) {
   .account-password__toggle:hover { background: var(--bg-tint); }
 }
