@@ -369,7 +369,7 @@ describe('ajustes, dificultad, rangos y easter egg', () => {
 
 import { updateRating, winProbability } from '../server/src/glicko';
 import { Matchmaker, compatible, mmrWindow, type QueueEntry } from '../server/src/matchmaking';
-import { register, login } from '../server/src/accounts';
+import { Registration, login } from '../server/src/accounts';
 import { parseSongLines } from '../server/src/importer';
 
 describe('MMR Glicko-2', () => {
@@ -429,24 +429,66 @@ describe('emparejamiento competitivo', () => {
 });
 
 describe('cuentas', () => {
-  it('registro, usuario repetido, inicio de sesión y contraseña incorrecta', async () => {
-    const s = new JsonStore(null);
-    const ident = { playerId: 'cuenta-ana-xxxxxxxxxx', secret: 'secreto-ana-xxxxxxxxxx' };
-    const fields = { username: 'Ana_99', email: ' ana@example.com ', password: 'clave-segura', confirmation: 'clave-segura' };
-    expect(await register(s, { ...fields, email: undefined }, ident)).toEqual({ ok: false, error: 'Escribe un correo electrónico válido.' });
-    expect((await register(s, { ...fields, email: 'ana@' }, ident)).ok).toBe(false);
-    expect(await register(s, { ...fields, confirmation: 'otra-clave' }, ident)).toEqual({ ok: false, error: 'Las contraseñas no coinciden.' });
-    expect(await s.account('ana_99')).toBeNull();
+  const fields = { username: 'Ana_99', email: ' ana@example.com ', password: 'clave-segura', confirmation: 'clave-segura' };
+  const ident = { playerId: 'cuenta-ana-xxxxxxxxxx', secret: 'secreto-ana-xxxxxxxxxx' };
+  const other = { playerId: 'cuenta-otra-xxxxxxxxx', secret: 'secreto-otra-xxxxxxxxx' };
+  const ip = '1.2.3.4';
 
-    expect((await register(s, fields, ident)).ok).toBe(true);
+  it('activa una cuenta solo tras verificar el código del correo', async () => {
+    const s = new JsonStore(null);
+    let code = '';
+    const registration = new Registration(s, async (email, sent) => {
+      expect(email).toBe('ana@example.com');
+      code = sent;
+    });
+    expect(await registration.start({ ...fields, email: undefined }, ident, ip)).toEqual({ ok: false, error: 'Escribe un correo electrónico válido.' });
+    expect(await registration.start({ ...fields, confirmation: 'otra-clave' }, ident, ip)).toEqual({ ok: false, error: 'Las contraseñas no coinciden.' });
+
+    const start = await registration.start(fields, ident, ip);
+    if (!start.ok) throw new Error(start.error);
+    expect(start).toEqual({ ok: true, token: expect.any(String) });
+    expect(code).toMatch(/^\d{6}$/);
+    expect(await s.account('ana_99')).toBeNull();
+    expect((await login(s, 'Ana_99', fields.password, ip)).ok).toBe(false);
+    expect((await registration.verify(start.token, code, other)).ok).toBe(false);
+    expect((await registration.verify(start.token, code === '000000' ? '111111' : '000000', ident)).ok).toBe(false);
+    expect(await registration.verify(start.token, code, ident)).toEqual({ ok: true, username: 'Ana_99', identity: ident });
+    expect((await registration.verify(start.token, code, ident)).ok).toBe(false);
     expect((await s.account('ana_99'))?.email).toBe('ana@example.com');
-    const other = { playerId: 'cuenta-otra-xxxxxxxxx', secret: 'secreto-otra-xxxxxxxxx' };
-    expect(await register(s, { ...fields, username: 'ana_99' }, other)).toEqual({ ok: false, error: 'Ese nombre de usuario ya está ocupado.' });
-    expect((await register(s, { ...fields, username: 'x' }, other)).ok).toBe(false);
-    const ok = await login(s, 'ANA_99', 'clave-segura', '1.2.3.4');
-    expect(ok).toEqual({ ok: true, username: 'Ana_99', identity: ident });
-    expect((await login(s, 'Ana_99', 'mal', '1.2.3.4')).ok).toBe(false);
+    expect(await registration.start({ ...fields, username: 'ana_99' }, other, ip)).toEqual({ ok: false, error: 'Ese nombre de usuario ya está ocupado.' });
+    expect(await login(s, 'ANA_99', fields.password, ip)).toEqual({ ok: true, username: 'Ana_99', identity: ident });
+    expect((await login(s, 'ANA_99', 'mal', ip)).ok).toBe(false);
     expect((await s.account('ana_99'))!.passHash).toMatch(/^scrypt\$/);
+  });
+
+  it('invalida el código tras cinco fallos y limita nuevos envíos', async () => {
+    const s = new JsonStore(null);
+    let code = '';
+    const registration = new Registration(s, async (_address, sent) => { code = sent; });
+    const start = await registration.start(fields, ident, ip);
+    if (!start.ok) throw new Error(start.error);
+    const wrong = code === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i++) expect((await registration.verify(start.token, wrong, ident)).ok).toBe(false);
+    expect((await registration.verify(start.token, code, ident)).ok).toBe(false);
+    expect((await registration.start(fields, ident, ip)).ok).toBe(true);
+    expect((await registration.start(fields, ident, ip)).ok).toBe(true);
+    expect((await registration.start(fields, ident, ip)).ok).toBe(false);
+    expect(await s.account('ana_99')).toBeNull();
+  });
+
+  it('caduca el código a los diez minutos', async () => {
+    const s = new JsonStore(null);
+    let code = '';
+    const registration = new Registration(s, async (_address, sent) => { code = sent; });
+    const start = await registration.start(fields, ident, ip);
+    if (!start.ok) throw new Error(start.error);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 10 * 60_000);
+    try {
+      expect((await registration.verify(start.token, code, ident)).ok).toBe(false);
+      expect(await s.account('ana_99')).toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 

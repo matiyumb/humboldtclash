@@ -24,7 +24,7 @@ export function AccountAccess() {
 
   return (
     <>
-      <button type="button" className="account-trigger" aria-haspopup="dialog" onClick={() => setOpen(true)}>Mi cuenta</button>
+      <button type="button" className="account-trigger" aria-haspopup="dialog" onClick={() => setOpen(true)}>{username ? 'Mi cuenta' : 'Iniciar sesión'}</button>
       <dialog ref={dialog} className="account-dialog" aria-labelledby="account-title" onClose={() => setOpen(false)}
         onCancel={(e) => { if (busy) e.preventDefault(); }}>
         <header className="account-dialog__header">
@@ -45,14 +45,16 @@ export function AccountAccess() {
 function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (value: boolean) => void; onSuccess: () => void }) {
   const [registering, setRegistering] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [verification, setVerification] = useState<{ token: string; email: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (busy) return;
     const data = new FormData(e.currentTarget);
     const password = data.get('password');
     const confirmation = data.get('confirmation');
-    if (registering && password !== confirmation) {
+    if (!verification && registering && password !== confirmation) {
       setError('Las contraseñas no coinciden.');
       e.currentTarget.querySelector<HTMLInputElement>('[name="confirmation"]')?.focus();
       return;
@@ -61,12 +63,21 @@ function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (va
     setBusy(true);
     setError(null);
     try {
-      const r = await postJson<Resp>(registering ? '/api/cuenta/registro' : '/api/cuenta/entrar', {
-        username: data.get('username'),
-        password,
-        ...(registering ? { email: data.get('email'), confirmation } : {}),
-        identity: identity(),
-      });
+      if (!verification && registering) {
+        const email = String(data.get('email')).trim();
+        const r = await postJson<{ ok: true; token: string } | { ok: false; error: string }>('/api/cuenta/registro', {
+          username: data.get('username'), password, email, confirmation, identity: identity(),
+        });
+        if (r.ok) {
+          setPasswordVisible(false);
+          setVerification({ token: r.token, email });
+        } else setError(r.error);
+        return;
+      }
+
+      const r = verification
+        ? await postJson<Resp>('/api/cuenta/verificar', { token: verification.token, code: data.get('code'), identity: identity() })
+        : await postJson<Resp>('/api/cuenta/entrar', { username: data.get('username'), password, identity: identity() });
       if (r.ok) {
         setSession(r.username, r.identity);
         onSuccess();
@@ -78,8 +89,27 @@ function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (va
     }
   };
 
+  if (verification) {
+    return (
+      <form key="verification" className="account" onSubmit={submit}>
+        <h3 className="h3">Verifica tu correo</h3>
+        <p className="account__who">Enviamos un código de 6 cifras a <b>{verification.email}</b>. Caduca en 10 minutos.</p>
+        <label className="field">
+          <span className="field__label">Código de verificación</span>
+          <input className="input" name="code" type="text" inputMode="numeric" autoComplete="one-time-code"
+            pattern="[0-9]{6}" maxLength={6} autoFocus required />
+        </label>
+        {error && <Banner>{error}</Banner>}
+        <button type="submit" className="btn btn--primary btn--block" disabled={busy}>Verificar correo</button>
+        <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => { setVerification(null); setError(null); }}>
+          Volver al registro
+        </button>
+      </form>
+    );
+  }
+
   return (
-    <form className="account" onSubmit={submit}>
+    <form key="credentials" className="account" onSubmit={submit}>
       <div className="tabs tabs--small" role="group" aria-label="Acceso a la cuenta">
         <button type="button" aria-pressed={!registering} className={!registering ? 'is-on' : ''} disabled={busy}
           onClick={() => { setRegistering(false); setPasswordVisible(false); setError(null); }}>Iniciar sesión</button>
@@ -117,7 +147,7 @@ function AccountForm({ busy, setBusy, onSuccess }: { busy: boolean; setBusy: (va
         </label>
       )}
       {error && <Banner>{error}</Banner>}
-      <button type="submit" className="btn btn--primary btn--block" disabled={busy}>{registering ? 'Crear cuenta' : 'Entrar'}</button>
+      <button type="submit" className="btn btn--primary btn--block" disabled={busy}>{registering ? 'Enviar código' : 'Entrar'}</button>
     </form>
   );
 }

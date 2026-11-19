@@ -12,7 +12,8 @@ import { LastFm } from './lastfm.js';
 import { Library } from './library.js';
 import { GameManager, cleanNickname } from './game.js';
 import { createStore, emptyProfile } from './store.js';
-import { login, register } from './accounts.js';
+import { login, Registration } from './accounts.js';
+import { verificationMailer } from './verificationMail.js';
 import { parseSongLines } from './importer.js';
 import { Matchmaker, type QueueEntry } from './matchmaking.js';
 
@@ -114,12 +115,29 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 // ---------- Cuentas ----------
-app.post('/api/cuenta/registro', async (req, res) => {
+const registration = new Registration(store, verificationMailer(process.env));
+app.use('/api/cuenta', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
+app.post('/api/cuenta/registro', async (req, res, next) => {
   const id = req.body?.identity as Identity | undefined;
   if (!id || !validId(id.playerId) || !validId(id.secret)) return res.status(400).json({ ok: false, error: 'Identidad no válida. Recarga la página.' });
-  const { username, email, password, confirmation } = req.body;
-  const r = await register(store, { username, email, password, confirmation }, id);
-  res.status(r.ok ? 200 : 400).json(r);
+  try {
+    const { username, email, password, confirmation } = req.body;
+    const r = await registration.start({ username, email, password, confirmation }, id, req.ip ?? '?');
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (error) { next(error); }
+});
+
+app.post('/api/cuenta/verificar', async (req, res, next) => {
+  const id = req.body?.identity as Identity | undefined;
+  if (!id || !validId(id.playerId) || !validId(id.secret)) return res.status(400).json({ ok: false, error: 'Identidad no válida. Recarga la página.' });
+  try {
+    const r = await registration.verify(req.body.token, req.body.code, id);
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (error) { next(error); }
 });
 
 app.post('/api/cuenta/entrar', async (req, res) => {
