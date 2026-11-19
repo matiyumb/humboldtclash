@@ -1,11 +1,11 @@
 import { randomBytes, createHash, timingSafeEqual, randomInt } from 'node:crypto';
 import { extname } from 'node:path';
 import {
-  MAX_PLAYERS, MIN_PLAYERS_MULTI, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUND_MS, LIGHTNING_MS,
+  MAX_PLAYERS, MIN_PLAYERS_MULTI, INTRO_MS, OPTIONS_PER_QUESTION, REVEAL_PAUSE_MS, ROUND_MS, LIGHTNING_MS, CHAT_HISTORY, CHAT_MAX_LENGTH, type ChatMessage,
   scoreFor, sanitizeSettings, rankFor, DEFAULT_SETTINGS, DEFAULT_RATING, DEFAULT_ROOM_SIZE, RANKED_SETTINGS, RANKED_CATALOG, type GameSettings, type RatingChange,
   type Ack, type Identity, type MissedSong, type PlayerView, type RevealView, type RoomState, type RoundResult, type StandingRow,
 } from '../../shared/types.js';
-import { AUDIO_TYPES, type Track } from './catalog.js';
+import { AUDIO_TYPES, titleKey, type Track } from './catalog.js';
 import type { Library, Resolved } from './library.js';
 import { DEFAULT_RD, DEFAULT_VOL, updateRating } from './glicko.js';
 import type { PublicRoom } from '../../shared/types.js';
@@ -29,6 +29,8 @@ interface Player {
   score: number;
   correct: number;
   lobbyTimer?: NodeJS.Timeout;
+  /** Horas de los últimos mensajes de chat (límite anti-spam). */
+  chatTimes: number[];
 }
 
 interface Answer { optionId: string; correct: boolean; points: number; lightning: boolean; ms: number }
@@ -73,6 +75,26 @@ interface Room {
   introUntil: number | null;
   settings: GameSettings;
   recorded: boolean; // resultados ya guardados en el perfil
+  /** Jugadores expulsados por el anfitrión: no pueden volver a esta sala. */
+  banned: Set<string>;
+  chat: ChatMessage[];
+  /** Mensajes enviados con una ronda en marcha: se muestran al revelar la respuesta. */
+  chatHeld: ChatMessage[];
+  /** Canciones (clave de título) que ya sonaron en esta sala, en esta partida o en las anteriores. */
+  seen: Set<string>;
+}
+
+/** Campos de una sala recién creada que no dependen del modo. */
+const freshRoomState = () => ({ banned: new Set<string>(), chat: [] as ChatMessage[], chatHeld: [] as ChatMessage[], seen: new Set<string>() });
+
+export const CHAT_WINDOW_MS = 5_000;
+export const CHAT_MAX_PER_WINDOW = 5;
+
+/** Texto de chat limpio: sin caracteres de control ni de dirección (suplantación), espacios normalizados. */
+export function cleanChat(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.replace(/[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_LENGTH);
+  return s.length ? s : null;
 }
 
 export type AudioTicket = { code: string; type: string } & (
@@ -101,6 +123,25 @@ export function cleanNickname(raw: unknown): string | null {
 function validIdentity(id: unknown): id is Identity {
   const ok = (v: unknown) => typeof v === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(v);
   return !!id && typeof id === 'object' && ok((id as Identity).playerId) && ok((id as Identity).secret);
+}
+
+/**
+ * Opciones falsas de una pregunta. Una canción que ya sonó no vuelve a salir como opción:
+ * primero se usan las que no han sonado nunca en la sala, luego las de partidas anteriores y,
+ * solo si el catálogo es tan pequeño que no queda otra, las que ya sonaron en esta partida.
+ */
+export function pickDistractors(pool: Track[], answer: Track, playedThisGame: Track[], seenInRoom: Set<string>, count = OPTIONS_PER_QUESTION - 1): Track[] {
+  const answerKey = titleKey(answer.title);
+  const played = new Set(playedThisGame.map((t) => titleKey(t.title)));
+  const keys = new Set<string>([answerKey]);
+  const tiers: Track[][] = [[], [], []];
+  for (const t of pool) {
+    const k = titleKey(t.title);
+    if (keys.has(k)) continue;
+    keys.add(k);
+    tiers[played.has(k) ? 2 : seenInRoom.has(k) ? 1 : 0].push(t);
+  }
+  return tiers.flatMap((tier) => shuffle(tier)).slice(0, count);
 }
 
 /** Posiciones con empates compartidos (1, 1, 3…). */
@@ -170,7 +211,7 @@ export class GameManager {
       code, mode: 'ranked', phase: 'lobby', hostId: pa.id, players: [pa, pb],
       catalogId: RANKED_CATALOG, deck: [], pool: [], used: new Set(), round: null, history: [],
       isPublic: false, catalogName: check.resolved.name, starting: false, introUntil: null,
-      settings: { ...RANKED_SETTINGS }, recorded: false, maxPlayers: 2, ratingChanges: new Map(),
+      settings: { ...RANKED_SETTINGS }, recorded: false, maxPlayers: 2, ratingChanges: new Map(), ...freshRoomState(),
     };
     this.rooms.set(code, room);
     this.sockets.set(a.socketId, { code, playerId: pa.id });
@@ -189,11 +230,13 @@ export class GameManager {
     const profiles = await store.profiles([a.id, b.id]);
     const cur = (id: string) => { const p = profiles.get(id); return { mmr: p?.mmr ?? DEFAULT_RATING, rd: p?.rd ?? DEFAULT_RD, vol: p?.vol ?? DEFAULT_VOL }; };
     const ra = cur(a.id), rb = cur(b.id);
-    const sa = won.has(a.id) ? (won.has(b.id) ? 0.5 : 1) : won.has(b.id) ? 0 : 0.5;
+    // Empate (nadie gana): medio punto para cada uno; no es victoria ni derrota.
+    const sa = won.has(a.id) ? 1 : won.has(b.id) ? 0 : 0.5;
     const na = updateRating(ra, rb, sa), nb = updateRating(rb, ra, 1 - sa);
+    const draw = sa === 0.5;
     await store.recordRanked([
-      { playerId: a.id, ...na, won: sa === 1 },
-      { playerId: b.id, ...nb, won: sa === 0 },
+      { playerId: a.id, ...na, won: sa === 1, draw },
+      { playerId: b.id, ...nb, won: sa === 0, draw },
     ]);
     room.ratingChanges.set(a.id, { before: ra.mmr, after: na.mmr, delta: na.mmr - ra.mmr });
     room.ratingChanges.set(b.id, { before: rb.mmr, after: nb.mmr, delta: nb.mmr - rb.mmr });
@@ -280,7 +323,7 @@ export class GameManager {
       catalogId: typeof catalogId === 'string' ? catalogId : null,
       deck: [], pool: [], used: new Set(), round: null, history: [],
       isPublic: mode === "multi" && isPublic === true, catalogName, starting: false, introUntil: null, settings, recorded: false,
-      maxPlayers: mode === 'solo' ? 1 : DEFAULT_ROOM_SIZE, ratingChanges: new Map(),
+      maxPlayers: mode === 'solo' ? 1 : DEFAULT_ROOM_SIZE, ratingChanges: new Map(), ...freshRoomState(),
     };
     this.rooms.set(code, room);
     this.sockets.set(socketId, { code, playerId: player.id });
@@ -299,6 +342,7 @@ export class GameManager {
     const code = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : '';
     const room = this.rooms.get(code);
     const existing = room?.players.find((p) => p.id === identity.playerId);
+    if (room?.banned.has(identity.playerId)) return { ok: false, error: 'El anfitrión te ha expulsado de esta sala.' };
 
     // Reconexión: mismo navegador (mismo id y secreto).
     if (room && existing) {
@@ -320,6 +364,7 @@ export class GameManager {
       this.sockets.set(socketId, { code, playerId: existing.id });
       if (!this.isActive(room, room.hostId)) room.hostId = existing.id;
       this.broadcast(room);
+      this.sendChatHistory(room, existing);
       return { ok: true, code, rejoined: true };
     }
 
@@ -336,7 +381,76 @@ export class GameManager {
     this.sockets.set(socketId, { code, playerId: player.id });
     if (!this.isActive(room, room.hostId)) room.hostId = player.id;
     this.broadcast(room);
+    this.sendChatHistory(room, player);
     return { ok: true, code, rejoined: false };
+  }
+
+  /** El anfitrión expulsa a un jugador (salas multijugador, públicas o privadas). No puede volver a entrar. */
+  kick(socketId: string, targetId: unknown): Ack {
+    const ctx = this.ctx(socketId);
+    if (!ctx) return { ok: false, error: 'No estás en una sala.' };
+    const { room, player } = ctx;
+    if (room.mode !== 'multi') return { ok: false, error: 'Solo se puede expulsar en las salas con amigos.' };
+    if (room.hostId !== player.id) return { ok: false, error: 'Solo el anfitrión puede expulsar jugadores.' };
+    if (targetId === player.id) return { ok: false, error: 'No puedes expulsarte a ti mismo.' };
+    const target = room.players.find((p) => p.id === targetId && !p.left);
+    if (!target) return { ok: false, error: 'Ese jugador ya no está en la sala.' };
+    room.banned.add(target.id);
+    if (target.lobbyTimer) { clearTimeout(target.lobbyTimer); target.lobbyTimer = undefined; }
+    if (target.socketId) {
+      this.sockets.delete(target.socketId);
+      this.send(target.socketId, 'room:kicked', { message: 'El anfitrión te ha expulsado de la sala.' });
+    }
+    target.socketId = null;
+    target.connected = false;
+    // En la sala de espera desaparece; con la partida en marcha queda como «se fue» (no puntúa ni gana).
+    if (room.phase === 'lobby') room.players = room.players.filter((p) => p !== target);
+    else target.left = true;
+    this.afterPresenceChange(room);
+    return { ok: true };
+  }
+
+  // ---------- chat ----------
+  /** Mensaje de chat en una sala multijugador (sala de espera, partida y resultados). */
+  chat(socketId: string, raw: unknown): Ack<{ held: boolean }> {
+    const ctx = this.ctx(socketId);
+    if (!ctx) return { ok: false, error: 'No estás en una sala.' };
+    const { room, player } = ctx;
+    if (room.mode !== 'multi') return { ok: false, error: 'El chat solo está en las salas con amigos.' };
+    const text = cleanChat(raw);
+    if (!text) return { ok: false, error: 'Escribe un mensaje.' };
+    const now = Date.now();
+    player.chatTimes = player.chatTimes.filter((t) => now - t < CHAT_WINDOW_MS);
+    if (player.chatTimes.length >= CHAT_MAX_PER_WINDOW) return { ok: false, error: 'Vas muy rápido: espera un momento.' };
+    player.chatTimes.push(now);
+    const msg: ChatMessage = { id: opaque(6), playerId: player.id, nickname: player.nickname, text, at: now };
+    // Con la ronda en marcha, nadie más lo ve hasta la revelación: así no se puede chivar la respuesta.
+    if (room.phase === 'playing' && room.round?.phase === 'answering') {
+      room.chatHeld.push(msg);
+      this.send(socketId, 'chat:message', { ...msg, held: true });
+      return { ok: true, held: true };
+    }
+    this.publishChat(room, [msg]);
+    return { ok: true, held: false };
+  }
+
+  private publishChat(room: Room, msgs: ChatMessage[]) {
+    if (!msgs.length) return;
+    room.chat.push(...msgs);
+    if (room.chat.length > CHAT_HISTORY) room.chat.splice(0, room.chat.length - CHAT_HISTORY);
+    for (const p of room.players) if (p.socketId && !p.left) for (const m of msgs) this.send(p.socketId, 'chat:message', m);
+  }
+
+  private releaseHeldChat(room: Room) {
+    const held = room.chatHeld;
+    room.chatHeld = [];
+    this.publishChat(room, held);
+  }
+
+  private sendChatHistory(room: Room, player: Player) {
+    if (room.mode !== 'multi' || !player.socketId) return;
+    const mine = room.chatHeld.filter((m) => m.playerId === player.id).map((m) => ({ ...m, held: true }));
+    this.send(player.socketId, 'chat:history', [...room.chat, ...mine]);
   }
 
   leave(socketId: string): Ack {
@@ -431,7 +545,7 @@ export class GameManager {
 
   // ---------- interno ----------
   private newPlayer(identity: Identity, nickname: string, socketId: string): Player {
-    return { id: identity.playerId, secretHash: hash(identity.secret), nickname, socketId, connected: true, left: false, score: 0, correct: 0 };
+    return { id: identity.playerId, secretHash: hash(identity.secret), nickname, socketId, connected: true, left: false, score: 0, correct: 0, chatTimes: [] };
   }
 
   private uniqueNick(room: Room, nick: string, selfId?: string) {
@@ -540,7 +654,10 @@ export class GameManager {
     room.catalogName = resolved.name;
     room.pool = resolved.tracks;
     // Orden aleatorio salvo que sea una playlist y se pida respetar su orden.
-    room.deck = resolved.ordered && !room.settings.shuffle ? [...resolved.deck] : shuffle(resolved.deck);
+    const ordered = resolved.ordered && !room.settings.shuffle ? [...resolved.deck] : shuffle(resolved.deck);
+    // «Jugar otra vez»: primero las canciones que aún no han sonado en esta sala; las ya oídas, solo si faltan.
+    const isSeen = (t: Track) => room.seen.has(titleKey(t.title));
+    room.deck = [...ordered.filter((t) => !isSeen(t)), ...ordered.filter(isSeen)];
     room.recorded = false;
     room.used = new Set();
     room.history = [];
@@ -576,8 +693,7 @@ export class GameManager {
 
   private setQuestion(room: Room, index: number, track: Track, replacements: number) {
     if (room.round) this.tickets.delete(room.round.token);
-    const distractors = shuffle(room.pool.filter((t) => t.title.toLowerCase() !== track.title.toLowerCase()))
-      .slice(0, OPTIONS_PER_QUESTION - 1);
+    const distractors = pickDistractors(room.pool, track, room.history.map((h) => h.track), room.seen);
     const options = shuffle([track, ...distractors]).map((t) => ({ id: opaque(), title: t.title, cover: t.cover ?? null, isCorrect: t.id === track.id }));
     const token = opaque(18);
     if (track.file) {
@@ -658,26 +774,47 @@ export class GameManager {
       results: [...results.values()],
     };
     room.history.push({ index: round.index, track: round.track, voided, results });
+    // Ya sonó: no vuelve a salir (ni como pregunta ni como opción) mientras queden otras.
+    if (!voided) room.seen.add(titleKey(round.track.title));
     this.tickets.delete(round.token);
+    this.releaseHeldChat(room);
     this.setTimer(room, REVEAL_PAUSE_MS, () => this.nextRound(room));
     this.broadcast(room);
   }
 
-  /** Victoria: 1.º puesto en multijugador o competitivo (empates incluidos). El modo solo es práctica. */
-  private winners(room: Room): Set<string> {
+  /** Quienes comparten el primer puesto (sin contar a los que se fueron). */
+  private leaders(room: Room) {
     const active = room.players.filter((p) => !p.left);
+    if (!active.length) return { active, top: 0, best: [] as Player[] };
+    const top = Math.max(...active.map((p) => p.score));
+    return { active, top, best: active.filter((p) => p.score === top) };
+  }
+
+  /**
+   * Victoria: solo el 1.º puesto en solitario de cada partida multijugador o competitiva.
+   * Un empate en cabeza no da victoria a nadie (ni derrota). El modo solo es práctica.
+   */
+  private winners(room: Room): Set<string> {
     if (room.mode === 'solo') return new Set();
+    const { active, top, best } = this.leaders(room);
     // Competitivo: si el rival abandonó, gana quien sigue (aunque tenga 0 puntos).
     if (room.mode === 'ranked' && active.length === 1) return new Set([active[0].id]);
     if (active.length < MIN_PLAYERS_MULTI) return new Set();
-    const top = Math.max(...active.map((p) => p.score));
-    return new Set(active.filter((p) => p.score === top && top > 0).map((p) => p.id));
+    return best.length === 1 && top > 0 ? new Set([best[0].id]) : new Set();
+  }
+
+  /** ¿Terminó en empate en el primer puesto? */
+  private isTie(room: Room): boolean {
+    if (room.mode === 'solo') return false;
+    const { active, best } = this.leaders(room);
+    return active.length >= MIN_PLAYERS_MULTI && best.length > 1;
   }
 
   private finish(room: Room) {
     room.phase = 'results';
     if (room.timer) clearTimeout(room.timer);
     if (room.round) this.tickets.delete(room.round.token);
+    this.releaseHeldChat(room);
     // Solo cuentan las partidas multijugador; el modo solo es práctica y no se guarda.
     if (!room.recorded && this.library.store && room.mode !== 'solo') {
       room.recorded = true;
@@ -729,7 +866,7 @@ export class GameManager {
         const r = h.results.get(me.id);
         if (r && !r.correct) missed.push({ round: h.index, title: h.track.title, artist: h.track.artist, reason: h.voided ? 'voided' : r.timedOut ? 'timeout' : 'wrong' });
       }
-      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id) };
+      results = { standings, missed, totalRounds: room.settings.rounds, youWon: this.winners(room).has(me.id), tie: this.isTie(room) };
     }
     return {
       code: room.code, mode: room.mode, phase: room.phase, you: me.id, hostId: room.hostId, players,

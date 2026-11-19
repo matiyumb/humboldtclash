@@ -64,7 +64,11 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
         <div className="ranked__top">
           <div>
             <p className="eyebrow">Competitivo 1v1</p>
-            <div className="ranked__record"><b>{profile?.rankedWins ?? 0}</b><span>V</span><b>{(profile?.rankedGames ?? 0) - (profile?.rankedWins ?? 0)}</b><span>D</span></div>
+            <div className="ranked__record" aria-label={`${profile?.rankedWins ?? 0} victorias, ${profile?.rankedDraws ?? 0} empates y ${Math.max(0, (profile?.rankedGames ?? 0) - (profile?.rankedWins ?? 0) - (profile?.rankedDraws ?? 0))} derrotas`}>
+              <b>{profile?.rankedWins ?? 0}</b><span>V</span>
+              <b className="ranked__draws">{profile?.rankedDraws ?? 0}</b><span>E</span>
+              <b>{Math.max(0, (profile?.rankedGames ?? 0) - (profile?.rankedWins ?? 0) - (profile?.rankedDraws ?? 0))}</b><span>D</span>
+            </div>
             {profile && profile.rankedGames < 5 && <p className="muted">Partidas de calibración: {profile.rankedGames}/5</p>}
           </div>
           {profile && <RankBadge rank={profile.rank.id} />}
@@ -73,6 +77,7 @@ export function Ranked({ onFound, autoSearch = false }: { onFound: (code: string
           <li>10 canciones de los éxitos del momento, fragmento completo.</li>
           <li>Rival de tu mismo rango y nivel parecido (se amplía si tardas en encontrar).</li>
           <li>Tu nivel competitivo es secreto: solo sirve para emparejarte con justicia.</li>
+          <li>Un empate no cuenta como victoria ni como derrota.</li>
           <li>Abandonar cuenta como derrota.</li>
         </ul>
         {status ? (

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { RoomState } from '../../../shared/types';
+import type { ChatMessage, RoomState } from '../../../shared/types';
+import { Chat } from './Chat';
 import { call } from '../net';
 import { unlockAudio } from '../audio';
 import { sfx } from '../sfx';
@@ -14,7 +15,7 @@ const REASON = {
 
 const secs = (ms: number | null) => (ms == null ? '—' : `${(ms / 1000).toLocaleString('es', { maximumFractionDigits: 1 })} s`);
 
-export function Results({ room, onHome, onRanked }: { room: RoomState; onHome: () => void; onRanked?: () => void }) {
+export function Results({ room, chat, onHome, onRanked }: { room: RoomState; chat: ChatMessage[]; onHome: () => void; onRanked?: () => void }) {
   const r = room.results!;
   const isHost = room.hostId === room.you;
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +63,9 @@ export function Results({ room, onHome, onRanked }: { room: RoomState; onHome: (
       ) : (
         <>
           <p className="eyebrow">{room.mode === 'ranked' ? 'Competitivo 1v1' : `Sala ${room.code}`} · {room.catalog?.name}</p>
-          <h1 className="h1">{room.mode === 'ranked' ? (r.youWon ? '¡Ganaste el duelo!' : mine?.position === 1 ? 'Empate' : 'Derrota') : 'Clasificación final'}</h1>
-          {room.mode === 'ranked' && <p className="muted">{r.youWon ? '+1 victoria competitiva.' : 'Sigue practicando: la próxima es tuya.'}</p>}
+          <h1 className="h1">{room.mode === 'ranked' ? (r.youWon ? '¡Ganaste el duelo!' : r.tie ? 'Empate' : 'Derrota') : 'Clasificación final'}</h1>
+          {room.mode === 'ranked' && <p className="muted">{r.youWon ? '+1 victoria competitiva.' : r.tie ? 'Un empate no cuenta como victoria ni como derrota.' : 'Sigue practicando: la próxima es tuya.'}</p>}
+          {room.mode === 'multi' && r.tie && <p className="tie-note" role="status">🤝 Empate en el primer puesto: nadie suma victoria ni derrota.</p>}
           <div className="panel table-wrap">
             <table className="table">
               <thead>
@@ -100,6 +102,7 @@ export function Results({ room, onHome, onRanked }: { room: RoomState; onHome: (
       )}
       {r.youWon && <p className="win-flag">🏆 ¡Victoria! Suma para tu rango</p>}
       {refresh > 0 && room.mode !== 'solo' && <ProfileCard profile={profile} highlight={r.youWon} />}
+      {room.mode === 'multi' && <Chat messages={chat} you={room.you} />}
       {error && <Banner>{error}</Banner>}
       <div className="row center results__actions">
         {room.mode === 'ranked' ? (

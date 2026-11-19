@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CatalogSummary, GameSettings, RoomState } from '../../shared/types';
+import { CHAT_HISTORY, type CatalogSummary, type ChatMessage, type GameSettings, type RoomState } from '../../shared/types';
 import type { Catalogs } from './screens/CatalogPicker';
 import { call, identity, noteServerTime, socket, store } from './net';
 import { forgetClip, unlockAudio } from './audio';
@@ -23,6 +23,7 @@ const codeFromPath = () => {
 export function App() {
   const [view, setView] = useState<View>({ name: 'home' });
   const [room, setRoom] = useState<RoomState | null>(null);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [nickname, setNicknameState] = useState(store.nickname());
@@ -64,10 +65,31 @@ export function App() {
     store.setRoom(null);
     forgetClip();
     setRoom(null);
+    setChat([]);
     if (location.pathname !== '/') history.replaceState(null, '', '/');
     setView({ name: 'home' });
     if (message) setNotice({ kind: 'error', text: message });
   }, []);
+
+  // Chat de la sala y expulsión por el anfitrión.
+  useEffect(() => {
+    const onMessage = (m: ChatMessage) => setChat((list) => {
+      // Un mensaje retenido durante la ronda vuelve al revelar: se sustituye, no se duplica.
+      const i = list.findIndex((x) => x.id === m.id);
+      const next = i >= 0 ? list.map((x, j) => (j === i ? m : x)) : [...list, m];
+      return next.slice(-CHAT_HISTORY);
+    });
+    const onHistory = (h: ChatMessage[]) => setChat(Array.isArray(h) ? h.slice(-CHAT_HISTORY) : []);
+    const onKicked = ({ message }: { message?: string }) => exitRoom(message ?? 'El anfitrión te ha expulsado de la sala.');
+    socket.on('chat:message', onMessage);
+    socket.on('chat:history', onHistory);
+    socket.on('room:kicked', onKicked);
+    return () => {
+      socket.off('chat:message', onMessage);
+      socket.off('chat:history', onHistory);
+      socket.off('room:kicked', onKicked);
+    };
+  }, [exitRoom]);
 
   // Recuperar el puesto tras recargar o perder la conexión.
   const rejoin = useCallback(async () => {
@@ -186,9 +208,9 @@ export function App() {
     );
   } else if (view.name === 'room') {
     if (!room) body = <section className="panel center"><p className="muted">Conectando con la sala…</p></section>;
-    else if (room.phase === 'lobby') body = <Lobby room={room} catalogs={catalogs} onLeave={leave} />;
-    else if (room.phase === 'playing') body = room.round ? <Game room={room} onLeave={leave} /> : <Intro room={room} />;
-    else body = <Results room={room} onHome={leave} onRanked={async () => { await leave(); setHomeTabState('ranked'); setAutoSearch(true); }} />;
+    else if (room.phase === 'lobby') body = <Lobby room={room} catalogs={catalogs} chat={chat} onLeave={leave} />;
+    else if (room.phase === 'playing') body = room.round ? <Game room={room} chat={chat} onLeave={leave} /> : <Intro room={room} />;
+    else body = <Results room={room} chat={chat} onHome={leave} onRanked={async () => { await leave(); setHomeTabState('ranked'); setAutoSearch(true); }} />;
   } else if (view.name === 'mixes') {
     body = <Mixes nickname={nickname} onBack={() => setView({ name: 'home' })} onPlay={(c) => setView({ name: 'setup', initial: c })} />;
   } else if (view.name === 'setup') {

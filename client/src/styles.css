@@ -649,3 +649,27 @@ details summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 .ranked__record b:first-of-type { color: var(--ok); }
 .ranked__record b:last-of-type { color: var(--bad); }
 .ranked__record span { color: var(--muted); font-weight: 800; margin-right: 10px; }
+
+/* ===================== Chat de sala, expulsar jugadores y empates ===================== */
+.chat { display: flex; flex-direction: column; gap: 10px; }
+.chat .h3 { margin: 0; }
+.chat__toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 2px 0; font-weight: 700; font-size: 17px; color: var(--text); cursor: pointer; text-align: left; }
+.chat__chev { margin-left: auto; color: var(--muted); }
+.chat__badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--green-600); color: var(--on-primary); font-size: 13px; display: inline-grid; place-items: center; }
+.chat__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
+.chat--fold .chat__list { max-height: 160px; }
+.chat__msg { padding: 6px 10px; border-radius: 12px; background: var(--bg-soft); overflow-wrap: anywhere; animation: chatIn 180ms var(--smooth) both; }
+.chat__msg.is-me { background: var(--green-100); }
+.chat__msg.is-held { opacity: 0.75; border: 1px dashed var(--line-strong); }
+.chat__nick { margin-right: 6px; color: var(--green-700); }
+.chat__held { display: block; color: var(--muted); font-size: 12px; }
+.chat__empty { color: var(--muted); }
+.chat__form { display: flex; gap: 8px; align-items: center; }
+.chat__input { min-height: 42px; font-size: 16px; }
+.chat__error { margin: 0; color: var(--bad); font-size: 14px; }
+@keyframes chatIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .chat__msg { animation: none; } }
+
+.player__kick { margin-left: auto; min-height: 32px; padding: 4px 10px; font-size: 13px; }
+.tie-note { text-align: center; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 14px; padding: 10px 14px; margin: 0; }
+.ranked__record b.ranked__draws { color: var(--muted); }

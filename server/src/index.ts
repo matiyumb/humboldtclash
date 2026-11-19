@@ -265,6 +265,8 @@ io.on('connection', (socket) => {
   });
   on('ranked:cancel', (d) => { if (validId(d.identity?.playerId)) matchmaker.leave(d.identity.playerId); return { ok: true }; });
   on('room:setPublic', (d) => games.setPublic(socket.id, d.isPublic));
+  on('room:kick', (d) => games.kick(socket.id, d.playerId));
+  on('chat:send', (d) => games.chat(socket.id, d.text));
   on('room:start', () => games.start(socket.id));
   on('room:playAgain', () => games.playAgain(socket.id));
   on('round:ready', (d) => games.ready(socket.id, d.questionId));
